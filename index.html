@@ -170,257 +170,6 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Машины по уровням (1-6 уровни пока пустые)
-        const carsByLevel = {
-            1: [],
-            2: [],
-            3: [],
-            4: [],
-            5: [],
-            6: [],
-            7: [
-                { name: "Daimler-AMX SL R232", day: 18900, night: 9450 },
-                { name: "Ferruccio Siun", day: 65625, night: 46875 },
-                { name: "Molsheim Formula", day: 65625, night: 46875 },
-                { name: "Wayn GT", day: 65625, night: 46875 },
-                { name: "Wurttem 918 Spyder", day: 65625, night: 46875 },
-                { name: "Ferruccio Verano", day: 65625, night: 46875 },
-                { name: "Molsheim Vivo", day: 65625, night: 46875 },
-                { name: "Leslie Ayrton", day: 65625, night: 46875 },
-                { name: "Molsheim Shiron", day: 65625, night: 46875 },
-                { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
-                { name: "Maranello FXX-K", day: 65625, night: 46875 }
-            ]
-        };
-
-        let currentUser = null;
-        let userData = { history: [], activeTheft: null };
-        let timerInterval = null;
-
-        window.addEventListener('DOMContentLoaded', () => {
-            const levelSelect = document.getElementById('level-select');
-            for (let i = 1; i <= 7; i++) {
-                let opt = document.createElement('option');
-                opt.value = i;
-                opt.textContent = `${i} уровень`;
-                if (i === 7) opt.selected = true;
-                levelSelect.appendChild(opt);
-            }
-
-            levelSelect.addEventListener('change', updateCarList);
-            document.getElementById('car-select').addEventListener('change', updateCarInfo);
-
-            document.getElementById('btn-login').addEventListener('click', login);
-            document.getElementById('btn-register').addEventListener('click', register);
-            document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
-            document.getElementById('btn-start').addEventListener('click', startTheft);
-            document.getElementById('btn-finish').addEventListener('click', finishTheft);
-            document.getElementById('btn-caught').addEventListener('click', caughtByPolice);
-
-            updateCarList();
-
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    currentUser = user;
-                    document.getElementById('auth-section').style.display = 'none';
-                    document.getElementById('app-section').style.display = 'block';
-                    document.getElementById('user-email').textContent = user.email;
-                    await loadUserData();
-                } else {
-                    currentUser = null;
-                    document.getElementById('auth-section').style.display = 'block';
-                    document.getElementById('app-section').style.display = 'none';
-                }
-            });
-
-            setInterval(updateClock, 1000);
-            updateClock();
-        });
-
-        function updateCarList() {
-            let level = document.getElementById('level-select').value;
-            let carSelect = document.getElementById('car-select');
-            carSelect.innerHTML = '';
-            
-            let cars = carsByLevel[level];
-            if (cars.length === 0) {
-                let opt = document.createElement('option');
-                opt.textContent = "Для этого уровня машины еще не добавлены";
-                carSelect.appendChild
-cat << 'EOF' > index.html
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Трекер угона авто (GTA RP)</title>
-    <style>
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-color: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --danger: #ef4444;
-            --danger-hover: #dc2626;
-            --success: #22c55e;
-            --border: #334155;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        h1, h2 {
-            text-align: center;
-        }
-        .clock-box {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-        }
-        .time-val {
-            color: var(--accent);
-            font-weight: bold;
-        }
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        input, select, button {
-            width: 100%;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            background: #0f172a;
-            color: var(--text-color);
-            font-size: 1rem;
-            margin-top: 10px;
-            outline: none;
-            box-sizing: border-box;
-        }
-        input:focus, select:focus {
-            border-color: var(--accent);
-        }
-        button {
-            background: var(--accent);
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.2s;
-            border: none;
-        }
-        button:hover {
-            background: var(--accent-hover);
-        }
-        button.danger {
-            background: var(--danger);
-        }
-        button.danger:hover {
-            background: var(--danger-hover);
-        }
-        button.secondary {
-            background: #475569;
-        }
-        button.secondary:hover {
-            background: #334155;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        th, td {
-            padding: 10px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-            font-size: 0.95rem;
-        }
-        th {
-            color: var(--text-muted);
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .stat-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 15px;
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--success);
-            margin-top: 5px;
-        }
-        .timer-display {
-            font-size: 1.2rem;
-            color: var(--accent);
-            margin: 10px 0;
-            font-weight: bold;
-        }
-        .auth-container {
-            max-width: 400px;
-            margin: 50px auto;
-        }
-        .user-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--card-bg);
-            padding: 10px 20px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            margin-bottom: 20px;
-        }
-        .button-group {
-            display: flex;
-            gap: 10px;
-        }
-        .caught-row {
-            color: var(--danger);
-        }
-    </style>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyAT03HslnNWesJcagAB-dFfITaQTrz8qw8",
-            authDomain: "gta-tracker-67613.firebaseapp.com",
-            projectId: "gta-tracker-67613",
-            storageBucket: "gta-tracker-67613.firebasestorage.app",
-            messagingSenderId: "308885042454",
-            appId: "1:308885042454:web:8ebafeac604e7e75b8cc37",
-            measurementId: "G-ZM1R53R9MH"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // Машины по уровням (1-6 уровни пока пустые)
         const carsByLevel = {
             1: [],
             2: [],
@@ -515,41 +264,47 @@ cat << 'EOF' > index.html
             let hours = date.getHours();
             let minutes = date.getMinutes();
             let totalMins = hours * 60 + minutes;
-            return totalMins >= 60 && totalMins < 540; // 01:00 - 09:00 МСК
+            return totalMins >= 60 && totalMins < 540;
         }
 
         function updateClock() {
             let now = new Date();
             let mskString = now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-            document.getElementById('msk-time').textContent = mskString;
+            let timeEl = document.getElementById('msk-time');
+            if (timeEl) timeEl.textContent = mskString;
             
             let night = isNightTime(now);
             let statusEl = document.getElementById('time-status');
-            if (night) {
-                statusEl.textContent = "🌙 Ночь (пониженная цена)";
-                statusEl.style.color = "#3b82f6";
-            } else {
-                statusEl.textContent = "☀️ День (обычная цена)";
-                statusEl.style.color = "#22c55e";
+            if (statusEl) {
+                if (night) {
+                    statusEl.textContent = "🌙 Ночь (пониженная цена)";
+                    statusEl.style.color = "#3b82f6";
+                } else {
+                    statusEl.textContent = "☀️ День (обычная цена)";
+                    statusEl.style.color = "#22c55e";
+                }
             }
             updateCarInfo();
         }
 
         function updateCarInfo() {
-            let level = document.getElementById('level-select').value;
+            let levelEl = document.getElementById('level-select');
+            let infoEl = document.getElementById('selected-car-info');
+            if (!levelEl || !infoEl) return;
+
+            let level = levelEl.value;
             let cars = carsByLevel[level];
             let idx = document.getElementById('car-select').value;
             
             if (!cars || cars.length === 0 || idx === "") {
-                document.getElementById('selected-car-info').textContent = "";
+                infoEl.textContent = "";
                 return;
             }
 
             let car = cars[idx];
             let night = isNightTime(new Date());
             let currentPrice = night ? car.night : car.day;
-            document.getElementById('selected-car-info').innerHTML = 
-                `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${currentPrice.toLocaleString()} ₽</strong>`;
+            infoEl.innerHTML = `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${currentPrice.toLocaleString()} ₽</strong>`;
         }
 
         async function register() {
@@ -573,6 +328,7 @@ cat << 'EOF' > index.html
         }
 
         async function loadUserData() {
+            if (!currentUser) return;
             let docRef = doc(db, "users", currentUser.uid);
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
@@ -585,6 +341,7 @@ cat << 'EOF' > index.html
         }
 
         async function saveUserData() {
+            if (!currentUser) return;
             let docRef = doc(db, "users", currentUser.uid);
             await setDoc(docRef, userData);
         }
@@ -660,24 +417,34 @@ cat << 'EOF' > index.html
             let elapsedSec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
             let mins = Math.floor(elapsedSec / 60);
             let secs = elapsedSec % 60;
-            document.getElementById('active-timer').textContent = 
-                String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+            let timerEl = document.getElementById('active-timer');
+            if (timerEl) {
+                timerEl.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+            }
         }
 
         function renderState() {
             if (userData.activeTheft) {
-                document.getElementById('active-panel').style.display = 'block';
-                document.getElementById('start-panel').style.display = 'none';
+                let activePanel = document.getElementById('active-panel');
+                let startPanel = document.getElementById('start-panel');
+                if (activePanel) activePanel.style.display = 'block';
+                if (startPanel) startPanel.style.display = 'none';
+                
                 let car = carsByLevel[userData.activeTheft.level][userData.activeTheft.carIndex];
-                document.getElementById('active-car-name').textContent = `${car.name} (${userData.activeTheft.level} уровень)`;
+                let carNameEl = document.getElementById('active-car-name');
+                if (carNameEl && car) {
+                    carNameEl.textContent = `${car.name} (${userData.activeTheft.level} уровень)`;
+                }
                 
                 if (!timerInterval) {
                     timerInterval = setInterval(updateActiveTimer, 1000);
                 }
                 updateActiveTimer();
             } else {
-                document.getElementById('active-panel').style.display = 'none';
-                document.getElementById('start-panel').style.display = 'block';
+                let activePanel = document.getElementById('active-panel');
+                let startPanel = document.getElementById('start-panel');
+                if (activePanel) activePanel.style.display = 'none';
+                if (startPanel) startPanel.style.display = 'block';
                 if (timerInterval) {
                     clearInterval(timerInterval);
                     timerInterval = null;
@@ -687,38 +454,42 @@ cat << 'EOF' > index.html
             let todayStr = new Date().toDateString();
             let todayHistory = userData.history.filter(h => h.date === todayStr);
 
-            // Считаем угоны только со статусом success
+            let todayCountEl = document.getElementById('today-count');
+            let todayEarnedEl = document.getElementById('today-earned');
+
             let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
-            document.getElementById('today-count').textContent = successfulThefts.length;
+            if (todayCountEl) todayCountEl.textContent = successfulThefts.length;
             
             let totalEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
-            document.getElementById('today-earned').textContent = totalEarned.toLocaleString() + ' ₽';
+            if (todayEarnedEl) todayEarnedEl.textContent = totalEarned.toLocaleString() + ' ₽';
 
             let tbody = document.getElementById('history-list');
-            if (todayHistory.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
-            } else {
-                tbody.innerHTML = todayHistory.map(item => {
-                    if (item.status === 'caught') {
-                        return `
-                            <tr class="caught-row">
-                                <td>${item.name} (${item.level} ур.)</td>
-                                <td>${item.time}</td>
-                                <td>${item.duration}</td>
-                                <td>Поймали менты (0 ₽)</td>
-                            </tr>
-                        `;
-                    } else {
-                        return `
-                            <tr>
-                                <td>${item.name} (${item.level} ур.)</td>
-                                <td>${item.time}</td>
-                                <td>${item.duration}</td>
-                                <td>${item.price.toLocaleString()} ₽</td>
-                            </tr>
-                        `;
-                    }
-                }).join('');
+            if (tbody) {
+                if (todayHistory.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
+                } else {
+                    tbody.innerHTML = todayHistory.map(item => {
+                        if (item.status === 'caught') {
+                            return `
+                                <tr class="caught-row">
+                                    <td>${item.name} (${item.level} ур.)</td>
+                                    <td>${item.time}</td>
+                                    <td>${item.duration}</td>
+                                    <td>Поймали менты (0 ₽)</td>
+                                </tr>
+                            `;
+                        } else {
+                            return `
+                                <tr>
+                                    <td>${item.name} (${item.level} ур.)</td>
+                                    <td>${item.time}</td>
+                                    <td>${item.duration}</td>
+                                    <td>${item.price.toLocaleString()} ₽</td>
+                                </tr>
+                            `;
+                        }
+                    }).join('');
+                }
             }
         }
     </script>
@@ -728,7 +499,7 @@ cat << 'EOF' > index.html
 <div class="container">
     <h1>Трекер угона авто (GTA RP)</h1>
 
-    <div id="auth-section" class="card auth-container" style="display:none;">
+    <div id="auth-section" class="card auth-container">
         <h2>Вход / Регистрация</h2>
         <input type="email" id="auth-email" placeholder="Email">
         <input type="password" id="auth-pass" placeholder="Пароль">
