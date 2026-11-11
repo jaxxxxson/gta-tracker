@@ -16,6 +16,7 @@
             --danger-hover: #dc2626;
             --success: #22c55e;
             --border: #334155;
+            --admin-bg: #334155;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -51,6 +52,10 @@
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .admin-card {
+            border: 1px dashed var(--accent);
+            background: #172554;
         }
         input, select, button {
             width: 100%;
@@ -168,7 +173,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -180,6 +185,8 @@
             appId: "1:308885042454:web:8ebafeac604e7e75b8cc37",
             measurementId: "G-ZM1R53R9MH"
         };
+
+        const ADMIN_EMAIL = "jecknikon@gmail.com";
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -230,6 +237,7 @@
             document.getElementById('btn-start').addEventListener('click', startTheft);
             document.getElementById('btn-finish').addEventListener('click', finishTheft);
             document.getElementById('btn-caught').addEventListener('click', caughtByPolice);
+            document.getElementById('btn-add-allowed').addEventListener('click', addAllowedEmail);
 
             updateCarList();
 
@@ -239,6 +247,15 @@
                     document.getElementById('auth-section').style.display = 'none';
                     document.getElementById('app-section').style.display = 'block';
                     document.getElementById('user-email').textContent = user.email;
+
+                    // Проверяем, админ ли это
+                    if (user.email === ADMIN_EMAIL) {
+                        document.getElementById('admin-panel').style.display = 'block';
+                        await loadAllowedEmails();
+                    } else {
+                        document.getElementById('admin-panel').style.display = 'none';
+                    }
+
                     await loadUserData();
                 } else {
                     currentUser = null;
@@ -250,6 +267,61 @@
             setInterval(updateClock, 1000);
             updateClock();
         });
+
+        async function loadAllowedEmails() {
+            let docRef = doc(db, "system", "config");
+            let docSnap = await getDoc(docRef);
+            let tbody = document.getElementById('allowed-list');
+            if (docSnap.exists()) {
+                let emails = docSnap.data().allowedEmails || [];
+                if (emails.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
+                } else {
+                    tbody.innerHTML = emails.map(email => `
+                        <tr>
+                            <td>${email}</td>
+                            <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedEmail('${email}')" title="Удалить">✕</button></td>
+                        </tr>
+                    `).join('');
+                }
+            } else {
+                tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
+            }
+        }
+
+        window.addAllowedEmail = async function() {
+            let emailInput = document.getElementById('new-allowed-email');
+            let email = emailInput.value.trim().toLowerCase();
+            if (!email) return;
+
+            let docRef = doc(db, "system", "config");
+            let docSnap = await getDoc(docRef);
+            let emails = [];
+            if (docSnap.exists()) {
+                emails = docSnap.data().allowedEmails || [];
+            }
+
+            if (!emails.includes(email)) {
+                emails.push(email);
+                await setDoc(docRef, { allowedEmails: emails });
+                emailInput.value = '';
+                await loadAllowedEmails();
+                alert("Почта добавлена в разрешенные!");
+            } else {
+                alert("Эта почта уже есть в списке.");
+            }
+        }
+
+        window.removeAllowedEmail = async function(email) {
+            let docRef = doc(db, "system", "config");
+            let docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                let emails = docSnap.data().allowedEmails || [];
+                emails = emails.filter(e => e !== email);
+                await setDoc(docRef, { allowedEmails: emails });
+                await loadAllowedEmails();
+            }
+        }
 
         function updateCarList() {
             let level = document.getElementById('level-select').value;
@@ -323,10 +395,25 @@
         }
 
         async function register() {
-            let email = document.getElementById('auth-email').value;
+            let emailInput = document.getElementById('auth-email').value.trim().toLowerCase();
             let pass = document.getElementById('auth-pass').value;
+
+            // Проверяем белый список перед регистрацией
             try {
-                await createUserWithEmailAndPassword(auth, email, pass);
+                let docRef = doc(db, "system", "config");
+                let docSnap = await getDoc(docRef);
+                let allowedEmails = [];
+                if (docSnap.exists()) {
+                    allowedEmails = docSnap.data().allowedEmails || [];
+                }
+
+                // Админ может зарегистрироваться в любом случае, остальные — только по списку
+                if (emailInput !== ADMIN_EMAIL && !allowedEmails.includes(emailInput)) {
+                    alert("Доступ ограничен! Ваш email не найден в списке разрешенных. Обратитесь к администратору для покупки доступа.");
+                    return;
+                }
+
+                await createUserWithEmailAndPassword(auth, emailInput, pass);
             } catch (err) {
                 alert("Ошибка регистрации: " + err.message);
             }
@@ -539,9 +626,30 @@
             <button id="btn-logout" class="danger" style="width: auto; padding: 6px 12px; margin: 0;">Выйти</button>
         </div>
 
+        <!-- Админ-панель (видна только вам) -->
+        <div id="admin-panel" class="card admin-card" style="display:none;">
+            <h2>👑 Панель администратора</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Добавьте email покупателя, чтобы он мог зарегистрироваться на сайте</p>
+            <input type="email" id="new-allowed-email" placeholder="email@example.com">
+            <button id="btn-add-allowed">Разрешить доступ</button>
+            
+            <h3 style="margin-top: 20px; font-size: 1rem;">Список разрешенных почт:</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th style="width: 40px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="allowed-list">
+                    <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
         <div class="clock-box">
             Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
-            Статус: <span id="time-status" style="font-weight: bold;">--</span>
+            Status: <span id="time-status" style="font-weight: bold;">--</span>
         </div>
 
         <div class="stats-grid">
