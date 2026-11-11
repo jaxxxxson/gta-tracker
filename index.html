@@ -394,7 +394,8 @@
                 { name: "Molsheim Shiron", day: 65625, night: 46875 },
                 { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
                 { name: "Maranello FXX-K", day: 65625, night: 46875 },
-                { name: "Leslie Alex", day: 65625, night: 46875 }
+                { name: "Leslie Alex", day: 65625, night: 46875 },
+                { name: "Angelholm Selip-CC850", day: 65625, night: 46875 }
             ]
         };
 
@@ -820,7 +821,6 @@
             alert(`Доступ для логина "${login}" успешно выдан / продлен!`);
         }
 
-        // Исправленная и стабильная функция удаления подписки
         window.removeAllowedUser = async function(login) {
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
@@ -1869,7 +1869,7 @@
                 <label for="debt-person">Имя / Логин человека:</label>
                 <input type="text" id="debt-person" placeholder="Например, Максим">
 
--                <label for="debt-amount" style="margin-top: 15px; display: block;">Сумма (₽):</label>
+                <label for="debt-amount" style="margin-top: 15px; display: block;">Сумма (₽):</label>
                 <input type="text" id="debt-amount" placeholder="Например, 1 000 000" oninput="formatMoneyInput(this)">
 
                 <label for="debt-type" style="margin-top: 15px; display: block;">Тип долга:</label>
