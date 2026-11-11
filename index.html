@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Помощник GTA RP (Фарм)</title>
+    <title>Помощник GTA RP (Фарм & Перекуп)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -25,13 +25,13 @@
             padding: 20px;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
         }
         h1, h2 {
             text-align: center;
         }
-        /* Главное оглавление: Фарм */
+        /* Главное оглавление */
         .nav-tabs {
             display: flex;
             gap: 10px;
@@ -57,21 +57,22 @@
             border-color: var(--accent);
         }
 
-        /* Подраздел внутри Фарма */
+        /* Подразделы */
         .sub-tabs {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
             padding-left: 20px;
             border-left: 3px solid var(--accent);
+            flex-wrap: wrap;
         }
         .sub-btn {
-            padding: 10px 20px;
+            padding: 10px 16px;
             border-radius: 8px;
             border: 1px solid var(--border);
             background: #1e293b;
             color: var(--text-muted);
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
@@ -86,6 +87,12 @@
             display: none;
         }
         .tab-content.active {
+            display: block;
+        }
+        .sub-content {
+            display: none;
+        }
+        .sub-content.active {
             display: block;
         }
 
@@ -114,7 +121,7 @@
             border: 1px dashed var(--accent);
             background: #172554;
         }
-        input, select, button {
+        input, select, button, textarea {
             width: 100%;
             padding: 12px;
             border-radius: 8px;
@@ -126,7 +133,7 @@
             outline: none;
             box-sizing: border-box;
         }
-        input:focus, select:focus {
+        input:focus, select:focus, textarea:focus {
             border-color: var(--accent);
         }
         button {
@@ -167,7 +174,7 @@
         }
         .stats-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -295,21 +302,45 @@
 
         let currentUser = null;
         let currentLogin = "";
-        let userData = { history: [], activeTheft: null };
+        let userData = { history: [], activeTheft: null, resellerItems: [] };
         let timerInterval = null;
         let subInterval = null;
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Переключение подразделов внутри Фарма
-            const subBtns = document.querySelectorAll('.sub-btn');
-            subBtns.forEach(btn => {
+            // Переключение главных разделов (Фарм / Перекуп)
+            const mainTabs = document.querySelectorAll('.nav-btn');
+            mainTabs.forEach(btn => {
                 btn.addEventListener('click', () => {
-                    subBtns.forEach(b => b.classList.remove('active'));
+                    mainTabs.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    let tabName = btn.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                    document.getElementById('tab-' + tabName).classList.add('active');
+                });
+            });
+
+            // Переключение подразделов внутри Фарма
+            const farmSubs = document.querySelectorAll('.farm-sub');
+            farmSubs.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    farmSubs.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     let subName = btn.getAttribute('data-sub');
                     document.querySelectorAll('.sub-content').forEach(sc => sc.classList.remove('active'));
                     document.getElementById('sub-' + subName).classList.add('active');
+                });
+            });
+
+            // Переключение подразделов внутри Перекупа
+            const resellerSubs = document.querySelectorAll('.reseller-sub');
+            resellerSubs.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    resellerSubs.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    let subName = btn.getAttribute('data-reseller');
+                    document.querySelectorAll('.reseller-content').forEach(rc => rc.classList.remove('active'));
+                    document.getElementById('reseller-' + subName).classList.add('active');
                 });
             });
 
@@ -332,6 +363,7 @@
             document.getElementById('btn-finish').addEventListener('click', finishTheft);
             document.getElementById('btn-caught').addEventListener('click', caughtByPolice);
             document.getElementById('btn-add-allowed').addEventListener('click', addAllowedUser);
+            document.getElementById('btn-add-reseller-item').addEventListener('click', addResellerItem);
 
             updateCarList();
 
@@ -372,7 +404,10 @@
                     }
 
                     if (!subInterval) {
-                        subInterval = setInterval(updateSubscriptionCountdown, 1000);
+                        subInterval = setInterval(() => {
+                            updateSubscriptionCountdown();
+                            updateResellerTimers();
+                        }, 1000);
                     }
                     updateSubscriptionCountdown();
 
@@ -407,6 +442,18 @@
             } else {
                 return `${hours} ч. ${minutes} мин. ${seconds} сек.`;
             }
+        }
+
+        function formatElapsedTime(ms) {
+            let totalSec = Math.floor(ms / 1000);
+            let days = Math.floor(totalSec / (3600 * 24));
+            let hours = Math.floor((totalSec % (3600 * 24)) / 3600);
+            let minutes = Math.floor((totalSec % 3600) / 60);
+            let seconds = totalSec % 60;
+            if (days > 0) {
+                return `${days} дн. ${hours} ч. ${minutes} мин.`;
+            }
+            return `${hours} ч. ${minutes} мин. ${seconds} сек.`;
         }
 
         function updateSubscriptionCountdown() {
@@ -623,8 +670,9 @@
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 userData = docSnap.data();
+                if (!userData.resellerItems) userData.resellerItems = [];
             } else {
-                userData = { history: [], activeTheft: null };
+                userData = { history: [], activeTheft: null, resellerItems: [] };
                 await setDoc(docRef, userData);
             }
             renderState();
@@ -634,6 +682,79 @@
             if (!currentUser) return;
             let docRef = doc(db, "users", currentUser.uid);
             await setDoc(docRef, userData);
+        }
+
+        // Логика Перекупа
+        async function addResellerItem() {
+            let name = document.getElementById('res-name').value.trim();
+            let buyPrice = parseFloat(document.getElementById('res-buy').value) || 0;
+            let sellPrice = parseFloat(document.getElementById('res-sell').value) || 0;
+            let isRedemption = document.getElementById('res-redemption').checked;
+            let owner = document.getElementById('res-owner').value.trim();
+
+            if (!name) {
+                alert("Введите название вещи!");
+                return;
+            }
+
+            let newItem = {
+                id: Date.now(),
+                name: name,
+                buyPrice: buyPrice,
+                sellPrice: sellPrice,
+                isRedemption: isRedemption,
+                owner: isRedemption ? owner : "",
+                startTime: Date.now(),
+                status: "active" // active, sold
+            };
+
+            userData.resellerItems.unshift(newItem);
+            await saveUserData();
+
+            // Очищаем форму
+            document.getElementById('res-name').value = "";
+            document.getElementById('res-buy').value = "";
+            document.getElementById('res-sell').value = "";
+            document.getElementById('res-redemption').checked = false;
+            document.getElementById('res-owner').value = "";
+            document.getElementById('res-owner-box').style.display = 'none';
+
+            renderState();
+            alert("Вещь успешно добавлена в учет!");
+        }
+
+        window.toggleRedemptionBox = function(checkbox) {
+            let box = document.getElementById('res-owner-box');
+            box.style.display = checkbox.checked ? 'block' : 'none';
+        }
+
+        window.sellResellerItem = async function(id) {
+            let item = userData.resellerItems.find(i => i.id === id);
+            if (item) {
+                item.status = "sold";
+                item.soldTime = Date.now();
+                await saveUserData();
+                renderState();
+            }
+        }
+
+        window.deleteResellerItem = async function(id) {
+            userData.resellerItems = userData.resellerItems.filter(i => i.id !== id);
+            await saveUserData();
+            renderState();
+        }
+
+        function updateResellerTimers() {
+            if (!currentUser) return;
+            let timerEls = document.querySelectorAll('.res-timer');
+            timerEls.push = Array.from;
+            timerEls.forEach(el => {
+                let start = parseInt(el.getAttribute('data-start'));
+                if (start) {
+                    let diff = Date.now() - start;
+                    el.textContent = formatElapsedTime(diff);
+                }
+            });
         }
 
         async function startTheft() {
@@ -747,6 +868,7 @@
                 }
             }
 
+            // Рендер Фарма (Угонщика)
             let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
             let todayHistory = userData.history.filter(h => h.date === todayStr);
 
@@ -809,6 +931,110 @@
                     tbody.innerHTML = html;
                 }
             }
+
+            // Рендер Перекупа
+            renderResellerCabinet();
+            renderResellerProperty();
+            renderResellerLedger();
+            renderResellerAnalytics();
+        }
+
+        function renderResellerCabinet() {
+            let items = userData.resellerItems || [];
+            let activeItems = items.filter(i => i.status === 'active');
+            let soldItems = items.filter(i => i.status === 'sold');
+
+            let totalSpent = activeItems.reduce((sum, i) => sum + i.buyPrice, 0);
+            let potentialProfit = activeItems.reduce((sum, i) => sum + (i.sellPrice - i.buyPrice), 0);
+            let netProfit = soldItems.reduce((sum, i) => sum + (i.sellPrice - i.buyPrice), 0);
+
+            document.getElementById('res-cabinet-capital').textContent = totalSpent.toLocaleString() + ' ₽';
+            document.getElementById('res-cabinet-profit').textContent = netProfit.toLocaleString() + ' ₽';
+            document.getElementById('res-cabinet-potential').textContent = potentialProfit.toLocaleString() + ' ₽';
+
+            let activeListEl = document.getElementById('res-cabinet-active-list');
+            if (activeItems.length === 0) {
+                activeListEl.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Активных лотов пока нет</td></tr>`;
+            } else {
+                activeListEl.innerHTML = activeItems.map(item => {
+                    let profit = item.sellPrice - item.buyPrice;
+                    let redemptionInfo = item.isRedemption ? `<br><small style="color: var(--accent);">Под выкуп от: ${item.owner}</small>` : "";
+                    let elapsedMs = Date.now() - item.startTime;
+                    let timerStr = item.isRedemption ? `<br><small style="color: var(--success);" class="res-timer" data-start="${item.startTime}">Прошло: ${formatElapsedTime(elapsedMs)}</small>` : "";
+
+                    return `
+                        <tr>
+                            <td><strong>${item.name}</strong>${redemptionInfo}${timerStr}</td>
+                            <td>${item.buyPrice.toLocaleString()} ₽</td>
+                            <td>${item.sellPrice.toLocaleString()} ₽</td>
+                            <td style="color: ${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit.toLocaleString()} ₽</td>
+                            <td style="text-align: right;">
+                                <button style="padding: 6px 10px; font-size: 0.8rem; width: auto;" onclick="sellResellerItem(${item.id})">Продать</button>
+                                <button class="delete-btn" onclick="deleteResellerItem(${item.id})" title="Удалить">✕</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        function renderResellerProperty() {
+            let items = userData.resellerItems || [];
+            let activeItems = items.filter(i => i.status === 'active');
+            let tbody = document.getElementById('reseller-property-list');
+
+            if (activeItems.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Имущество не найдено</td></tr>`;
+            } else {
+                tbody.innerHTML = activeItems.map(item => {
+                    let redemptionInfo = item.isRedemption ? `Владелец (выкуп): ${item.owner}` : "Собственный товар";
+                    let elapsedMs = Date.now() - item.startTime;
+                    return `
+                        <tr>
+                            <td><strong>${item.name}</strong><br><small style="color: var(--text-muted);">${redemptionInfo}</small></td>
+                            <td>Покупка: ${item.buyPrice.toLocaleString()} ₽<br>Продажа: ${item.sellPrice.toLocaleString()} ₽</td>
+                            <td>⏳ ${formatElapsedTime(elapsedMs)}</td>
+                            <td>Активен</td>
+                            <td style="text-align: right;">
+                                <button style="padding: 6px 10px; font-size: 0.8rem; width: auto;" onclick="sellResellerItem(${item.id})">Продать</button>
+                                <button class="delete-btn" onclick="deleteResellerItem(${item.id})">✕</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        function renderResellerLedger() {
+            let items = userData.resellerItems || [];
+            let tbody = document.getElementById('reseller-ledger-list');
+
+            if (items.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Тетрадь пуста</td></tr>`;
+            } else {
+                tbody.innerHTML = items.map(item => {
+                    let statusText = item.status === 'sold' ? `<span style="color: var(--success);">Продано</span>` : `<span style="color: var(--accent);">В продаже</span>`;
+                    let profit = item.sellPrice - item.buyPrice;
+                    return `
+                        <tr>
+                            <td>${item.name}</td>
+                            <td>-${item.buyPrice.toLocaleString()} ₽ / +${item.sellPrice.toLocaleString()} ₽</td>
+                            <td>${statusText} (Прибыль: ${profit.toLocaleString()} ₽)</td>
+                            <td style="text-align: right;"><button class="delete-btn" onclick="deleteResellerItem(${item.id})">✕</button></td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
+
+        function renderResellerAnalytics() {
+            let items = userData.resellerItems || [];
+            let soldItems = items.filter(i => i.status === 'sold');
+            let netProfit = soldItems.reduce((sum, i) => sum + (i.sellPrice - i.buyPrice), 0);
+            let revenue = soldItems.reduce((sum, i) => sum + i.sellPrice, 0);
+
+            document.getElementById('res-analyst-profit').textContent = netProfit.toLocaleString() + ' ₽';
+            document.getElementById('res-analyst-revenue').textContent = revenue.toLocaleString() + ' ₽';
         }
     </script>
 </head>
@@ -834,21 +1060,14 @@
 
         <div id="admin-panel" class="card admin-card" style="display:none;">
             <h2>👑 Панель администратора</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Управление доступом и сроком подписки по логинам</p>
-            
             <input type="text" id="new-allowed-login" placeholder="Введите логин пользователя">
             <label for="new-allowed-days" style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок подписки (в днях):</label>
             <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
             <button id="btn-add-allowed">Выдать / продлить доступ</button>
-            
             <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки:</h3>
             <table>
                 <thead>
-                    <tr>
-                        <th>Логин</th>
-                        <th>Осталось времени</th>
-                        <th style="width: 40px;"></th>
-                    </tr>
+                    <tr><th>Логин</th><th>Осталось времени</th><th style="width: 40px;"></th></tr>
                 </thead>
                 <tbody id="allowed-list">
                     <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Загрузка...</td></tr>
@@ -856,15 +1075,14 @@
             </table>
         </div>
 
-        <!-- Главное оглавление: Фарм -->
+        <!-- Главное оглавление: Фарм и Перекуп -->
         <div class="nav-tabs">
             <button class="nav-btn active" data-tab="farm">💰 Фарм</button>
+            <button class="nav-btn" data-tab="reseller">📈 Перекуп</button>
         </div>
 
         <!-- Раздел Фарм -->
         <div id="tab-farm" class="tab-content active">
-            
-            <!-- Подразделы внутри Фарма -->
             <div class="sub-tabs">
                 <button class="sub-btn active" data-sub="theft">🚗 Угонщик</button>
             </div>
@@ -928,7 +1146,128 @@
                     </table>
                 </div>
             </div>
+        </div>
 
+        <!-- Раздел Перекуп -->
+        <div id="tab-reseller" class="tab-content">
+            <div class="sub-tabs">
+                <button class="sub-btn reseller-sub active" data-reseller="cabinet">Мой кабинет</button>
+                <button class="sub-btn reseller-sub" data-reseller="property">Имущество</button>
+                <button class="sub-btn reseller-sub" data-reseller="ledger">Торговая тетрадь</button>
+                <button class="sub-btn reseller-sub" data-reseller="analytics">Аналитика</button>
+            </div>
+
+            <!-- Мой кабинет -->
+            <div id="reseller-cabinet" class="reseller-content active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div>Капитал в вещах</div>
+                        <div id="res-cabinet-capital" class="stat-value" style="color: var(--accent);">0 ₽</div>
+                    </div>
+                    <div class="stat-card">
+                        <div>Чистая прибыль</div>
+                        <div id="res-cabinet-profit" class="stat-value">0 ₽</div>
+                    </div>
+                    <div class="stat-card">
+                        <div>Потенциал остатка</div>
+                        <div id="res-cabinet-potential" class="stat-value" style="color: #f59e0b;">0 ₽</div>
+                    </div>
+                </div>
+
+                <!-- Форма добавления лота -->
+                <div class="card">
+                    <h2>➕ Добавить вещь / лот</h2>
+                    <input type="text" id="res-name" placeholder="Название вещи (например, Кобура серая гучи)">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="number" id="res-buy" placeholder="Цена покупки (₽)">
+                        <input type="number" id="res-sell" placeholder="Цена продажи (₽)">
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="res-redemption" style="width: auto;" onchange="toggleRedemptionBox(this)">
+                            <span>Взято под выкуп (чужая вещь)</span>
+                        </label>
+                    </div>
+                    <div id="res-owner-box" style="display: none; margin-top: 10px;">
+                        <input type="text" id="res-owner" placeholder="Имя/Логин владельца (у кого взял)">
+                    </div>
+                    <button id="btn-add-reseller-item" style="margin-top: 15px;">Добавить в учет</button>
+                </div>
+
+                <!-- Активные лоты -->
+                <div class="card">
+                    <h2>Активные лоты</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Вещь / Владелец / Таймер</th>
+                                <th>Покупка</th>
+                                <th>Продажа</th>
+                                <th>Прибыль</th>
+                                <th style="width: 80px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="res-cabinet-active-list">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Активных лотов пока нет</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Имущество -->
+            <div id="reseller-property" class="reseller-content">
+                <div class="card">
+                    <h2>Имущество и карточки</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Вещь и статус</th>
+                                <th>Цены</th>
+                                <th>Время с момента взятия</th>
+                                <th>Статус</th>
+                                <th style="width: 80px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="reseller-property-list">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Имущество не найдено</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Торговая тетрадь -->
+            <div id="reseller-ledger" class="reseller-content">
+                <div class="card">
+                    <h2>Торговая тетрадь (Все операции)</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Вещь</th>
+                                <th>Суммы (Покупка / Продажа)</th>
+                                <th>Статус</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="reseller-ledger-list">
+                            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Тетрадь пуста</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Аналитика -->
+            <div id="reseller-analytics" class="reseller-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div>Чистая прибыль</div>
+                        <div id="res-analyst-profit" class="stat-value">0 ₽</div>
+                    </div>
+                    <div class="stat-card">
+                        <div>Выручка нетто</div>
+                        <div id="res-analyst-revenue" class="stat-value" style="color: var(--accent);">0 ₽</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>
