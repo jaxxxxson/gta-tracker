@@ -350,6 +350,21 @@
             return login.trim().toLowerCase() + "@gta-tracker.local";
         }
 
+        // Форматирование чисел пробелами (1 000 000)
+        window.formatMoneyInput = function(input) {
+            let value = input.value.replace(/\D/g, '');
+            if (value === "") {
+                input.value = "";
+                return;
+            }
+            input.value = Number(value).toLocaleString('ru-RU');
+        }
+
+        function getCleanNumber(elementId) {
+            let val = document.getElementById(elementId).value;
+            return parseFloat(val.replace(/\s/g, '')) || 0;
+        }
+
         const carsByLevel = {
             1: [],
             2: [],
@@ -971,11 +986,10 @@
             await setDoc(docRef, userData, { merge: true });
         }
 
-        // Логика Долгов
         async function addDebtRecord() {
             let person = document.getElementById('debt-person').value.trim();
-            let amount = parseFloat(document.getElementById('debt-amount').value) || 0;
-            let type = document.getElementById('debt-type').value; // 'i_owe' (я должен) или 'owes_me' (мне должны)
+            let amount = getCleanNumber('debt-amount');
+            let type = document.getElementById('debt-type').value;
 
             if (!person || amount <= 0) {
                 alert("Введите имя человека и корректную сумму!");
@@ -1009,7 +1023,7 @@
 
         async function addCourierRecord() {
             let count = parseInt(document.getElementById('courier-count').value) || 0;
-            let pricePerOne = parseFloat(document.getElementById('courier-price').value) || 0;
+            let pricePerOne = getCleanNumber('courier-price');
 
             if (count <= 0 || pricePerOne <= 0) {
                 alert("Введите корректное количество и стоимость за 1 закладку!");
@@ -1031,6 +1045,7 @@
             await saveUserData();
 
             document.getElementById('courier-count').value = "";
+            document.getElementById('courier-price').value = "";
             renderState();
             loadGlobalRatings();
             alert(`Успешно добавлено! Заработано: ${earned.toLocaleString()} ₽`);
@@ -1045,7 +1060,7 @@
 
         async function addDiceGame() {
             let result = document.getElementById('dice-result').value;
-            let amount = parseFloat(document.getElementById('dice-amount').value) || 0;
+            let amount = getCleanNumber('dice-amount');
 
             if (amount <= 0) {
                 alert("Введите корректную сумму ставки!");
@@ -1078,7 +1093,7 @@
 
         async function addResellerItem() {
             let name = document.getElementById('res-name').value.trim();
-            let buyPrice = parseFloat(document.getElementById('res-buy').value) || 0;
+            let buyPrice = getCleanNumber('res-buy');
             let isRedemption = document.getElementById('res-redemption').checked;
             let owner = document.getElementById('res-owner').value.trim();
 
@@ -1124,7 +1139,7 @@
             let priceStr = prompt(`За сколько вы продали вещь "${item.name}"?`, item.buyPrice);
             if (priceStr === null) return;
 
-            let sellPrice = parseFloat(priceStr);
+            let sellPrice = parseFloat(priceStr.replace(/\s/g, ''));
             if (isNaN(sellPrice)) {
                 alert("Введите корректную сумму!");
                 return;
@@ -1595,7 +1610,7 @@
                 <div class="card">
                     <h2>➕ Добавить вещь / лот</h2>
                     <input type="text" id="res-name" placeholder="Название вещи">
-                    <input type="number" id="res-buy" placeholder="Цена покупки (₽)">
+                    <input type="text" id="res-buy" placeholder="Цена покупки (₽)" oninput="formatMoneyInput(this)">
 
                     <div style="margin-top: 15px;">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -1766,7 +1781,7 @@
                     <input type="number" id="courier-count" placeholder="Например, 15">
 
                     <label for="courier-price" style="margin-top: 15px; display: block;">Оплата за 1 закладку (₽):</label>
-                    <input type="number" id="courier-price" placeholder="Например, 12000">
+                    <input type="text" id="courier-price" placeholder="Например, 12 000" oninput="formatMoneyInput(this)">
 
                     <button id="btn-add-courier" style="margin-top: 15px;">Засчитать и добавить в учет</button>
                 </div>
@@ -1821,7 +1836,7 @@
                 </select>
 
                 <label for="dice-amount" style="margin-top: 15px; display: block;">Сумма ставки (₽):</label>
-                <input type="number" id="dice-amount" placeholder="Например, 500000">
+                <input type="text" id="dice-amount" placeholder="Например, 500 000" oninput="formatMoneyInput(this)">
 
                 <button id="btn-add-dice" style="margin-top: 15px;">Записать в историю</button>
             </div>
@@ -1863,7 +1878,7 @@
                 <input type="text" id="debt-person" placeholder="Например, Максим">
 
                 <label for="debt-amount" style="margin-top: 15px; display: block;">Сумма (₽):</label>
-                <input type="number" id="debt-amount" placeholder="Например, 1000000">
+                <input type="text" id="debt-amount" placeholder="Например, 1 000 000" oninput="formatMoneyInput(this)">
 
                 <label for="debt-type" style="margin-top: 15px; display: block;">Тип долга:</label>
                 <select id="debt-type">
