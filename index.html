@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Помощник GTA RP (Перекуп & Фарм)</title>
+    <title>Помощник GTA RP (Перекуп, Фарм & Казино)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -298,7 +298,7 @@
 
         let currentUser = null;
         let currentLogin = "";
-        let userData = { history: [], activeTheft: null, resellerItems: [] };
+        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
         let timerInterval = null;
         let subInterval = null;
         let userExpiryTime = 0;
@@ -335,6 +335,7 @@
             document.getElementById('btn-caught').addEventListener('click', caughtByPolice);
             document.getElementById('btn-add-allowed').addEventListener('click', addAllowedUser);
             document.getElementById('btn-add-reseller-item').addEventListener('click', addResellerItem);
+            document.getElementById('btn-add-dice').addEventListener('click', addDiceGame);
 
             updateCarList();
 
@@ -642,8 +643,9 @@
             if (docSnap.exists()) {
                 userData = docSnap.data();
                 if (!userData.resellerItems) userData.resellerItems = [];
+                if (!userData.diceHistory) userData.diceHistory = [];
             } else {
-                userData = { history: [], activeTheft: null, resellerItems: [] };
+                userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
                 await setDoc(docRef, userData);
             }
             renderState();
@@ -653,6 +655,38 @@
             if (!currentUser) return;
             let docRef = doc(db, "users", currentUser.uid);
             await setDoc(docRef, userData);
+        }
+
+        // Логика Казино - Кости
+        async function addDiceGame() {
+            let result = document.getElementById('dice-result').value; // win или lose
+            let amount = parseFloat(document.getElementById('dice-amount').value) || 0;
+
+            if (amount <= 0) {
+                alert("Введите корректную сумму ставки!");
+                return;
+            }
+
+            let now = new Date();
+            let record = {
+                id: Date.now(),
+                result: result, // 'win' или 'lose'
+                amount: amount,
+                time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+            };
+
+            userData.diceHistory.unshift(record);
+            await saveUserData();
+
+            document.getElementById('dice-amount').value = "";
+            renderState();
+        }
+
+        window.deleteDiceItem = async function(id) {
+            userData.diceHistory = userData.diceHistory.filter(d => d.id !== id);
+            await saveUserData();
+            renderState();
         }
 
         async function addResellerItem() {
@@ -680,7 +714,6 @@
             userData.resellerItems.unshift(newItem);
             await saveUserData();
 
-            // Сброс формы
             document.getElementById('res-name').value = "";
             document.getElementById('res-buy').value = "";
             document.getElementById('res-redemption').checked = false;
@@ -914,6 +947,9 @@
             renderResellerProperty();
             renderResellerLedger();
             renderResellerAnalytics();
+
+            // Рендер Казино (Кости)
+            renderDiceState();
         }
 
         function renderResellerCabinet() {
@@ -1011,6 +1047,38 @@
             document.getElementById('res-analyst-profit').textContent = netProfit.toLocaleString() + ' ₽';
             document.getElementById('res-analyst-revenue').textContent = revenue.toLocaleString() + ' ₽';
         }
+
+        function renderDiceState() {
+            let diceList = userData.diceHistory || [];
+            let totalWins = diceList.filter(d => d.result === 'win').reduce((sum, d) => sum + d.amount, 0);
+            let totalLosses = diceList.filter(d => d.result === 'lose').reduce((sum, d) => sum + d.amount, 0);
+            let netProfit = totalWins - totalLosses;
+
+            document.getElementById('dice-stat-wins').textContent = totalWins.toLocaleString() + ' ₽';
+            document.getElementById('dice-stat-losses').textContent = totalLosses.toLocaleString() + ' ₽';
+            
+            let netEl = document.getElementById('dice-stat-net');
+            netEl.textContent = netProfit.toLocaleString() + ' ₽';
+            netEl.style.color = netProfit >= 0 ? 'var(--success)' : 'var(--danger)';
+
+            let tbody = document.getElementById('dice-history-list');
+            if (diceList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">История игр в кости пуста</td></tr>`;
+            } else {
+                tbody.innerHTML = diceList.map(item => {
+                    let isWin = item.result === 'win';
+                    let resText = isWin ? `<span style="color: var(--success);">Выигрыш (+${item.amount.toLocaleString()} ₽)</span>` : `<span style="color: var(--danger);">Проигрыш (-${item.amount.toLocaleString()} ₽)</span>`;
+                    return `
+                        <tr>
+                            <td>${item.date} ${item.time}</td>
+                            <td>${item.amount.toLocaleString()} ₽</td>
+                            <td>${resText}</td>
+                            <td style="text-align: right;"><button class="delete-btn" onclick="deleteDiceItem(${item.id})">✕</button></td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
     </script>
 </head>
 <body>
@@ -1050,10 +1118,11 @@
             </table>
         </div>
 
-        <!-- Главное оглавление: Перекуп первый, Фарм второй -->
+        <!-- Главное оглавление: Перекуп, Фарм, Казино -->
         <div class="nav-tabs">
             <button class="nav-btn active" data-tab="reseller">📈 Перекуп</button>
             <button class="nav-btn" data-tab="farm">💰 Фарм</button>
+            <button class="nav-btn" data-tab="casino">🎰 Казино</button>
         </div>
 
         <!-- Раздел Перекуп -->
@@ -1078,7 +1147,6 @@
                     </div>
                 </div>
 
-                <!-- Форма добавления лота (без картинок) -->
                 <div class="card">
                     <h2>➕ Добавить вещь / лот</h2>
                     <input type="text" id="res-name" placeholder="Название вещи">
@@ -1096,7 +1164,6 @@
                     <button id="btn-add-reseller-item" style="margin-top: 15px;">Добавить в учет</button>
                 </div>
 
-                <!-- Активные лоты -->
                 <div class="card">
                     <h2>Активные лоты</h2>
                     <table>
@@ -1230,6 +1297,59 @@
                     </thead>
                     <tbody id="history-list">
                         <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Раздел Казино (Кости) -->
+        <div id="tab-casino" class="tab-content">
+            <div class="sub-tabs">
+                <span class="sub-btn active">🎲 Кости</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div>Всего выиграно</div>
+                    <div id="dice-stat-wins" class="stat-value">0 ₽</div>
+                </div>
+                <div class="stat-card">
+                    <div>Всего проиграно</div>
+                    <div id="dice-stat-losses" class="stat-value" style="color: var(--danger);">0 ₽</div>
+                </div>
+                <div class="stat-card">
+                    <div>Итоговый баланс (Чистая прибыль)</div>
+                    <div id="dice-stat-net" class="stat-value">0 ₽</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🎲 Записать игру в кости</h2>
+                <label for="dice-result">Результат игры:</label>
+                <select id="dice-result">
+                    <option value="win">Победа (Выигрыш)</option>
+                    <option value="lose">Проигрыш</option>
+                </select>
+
+                <label for="dice-amount" style="margin-top: 15px; display: block;">Сумма ставки (₽):</label>
+                <input type="number" id="dice-amount" placeholder="Например, 500000">
+
+                <button id="btn-add-dice" style="margin-top: 15px;">Записать в историю</button>
+            </div>
+
+            <div class="card">
+                <h2>История игр в кости</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Сумма ставки</th>
+                            <th>Результат</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="dice-history-list">
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">История игр в кости пуста</td></tr>
                     </tbody>
                 </table>
             </div>
