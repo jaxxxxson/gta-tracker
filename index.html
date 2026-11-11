@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTA RP Tracker - Личный кабинет</title>
+    <title>GTA RP Tracker - Вход в систему</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -18,7 +18,7 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .container { width: 100%; max-width: 600px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .container { width: 100%; max-width: 450px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
         h1, h2 { text-align: center; margin-bottom: 15px; }
         .subtitle { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
         .form-group { margin-bottom: 15px; }
@@ -40,12 +40,16 @@
     <div class="container">
         <div id="auth-screen">
             <h1>GTA RP Tracker</h1>
-            <div class="subtitle">Введите ваш персональный ключ доступа</div>
+            <div class="subtitle">Авторизация пользователя</div>
             <div class="form-group">
-                <label>Ключ активации</label>
-                <input type="text" id="accessKey" placeholder="GTA-TEST-..." autocomplete="off">
+                <label>Логин</label>
+                <input type="text" id="username" placeholder="Введите логин" autocomplete="off">
             </div>
-            <button id="loginBtn" onclick="verifyKey()">Войти в систему</button>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" id="password" placeholder="Введите пароль">
+            </div>
+            <button onclick="loginUser()">Войти в систему</button>
             <div id="message"></div>
         </div>
 
@@ -84,83 +88,167 @@
             return deviceId;
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            const savedKey = localStorage.getItem('gta_tracker_active_key');
-            if (savedKey) {
-                document.getElementById('accessKey').value = savedKey;
-                verifyKey(true);
-            }
-        });
-
-        async function verifyKey(isAuto = false) {
-            const key = document.getElementById('accessKey').value.trim();
+        async function loginUser() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
             const msg = document.getElementById('message');
             const deviceId = getDeviceId();
-            
-            if (!key) {
-                if (!isAuto) { msg.className = 'error'; msg.innerText = 'Введите ключ доступа!'; }
+
+            if (!username || !password) {
+                msg.className = 'error'; 
+                msg.innerText = 'Введите логин и пароль!';
                 return;
             }
 
-            if (!isAuto) { msg.className = ''; msg.innerText = 'Проверка ключа...'; }
+            msg.className = ''; 
+            msg.innerText = 'Вход в систему...';
 
             try {
-                const response = await fetch(`${API_URL}/api/verify-key`, {
+                const response = await fetch(`${API_URL}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key, device_id: deviceId })
+                    body: JSON.stringify({ username, password, device_id: deviceId })
                 });
 
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    localStorage.setItem('gta_tracker_active_key', key);
+                    localStorage.setItem('gta_tracker_user', username);
                     document.getElementById('auth-screen').classList.add('hidden');
                     document.getElementById('dashboard-screen').classList.remove('hidden');
                     document.getElementById('expiry-info').innerText = `Доступ активен до: ${new Date(data.expires_at).toLocaleString()}`;
                     loadStats();
                 } else {
-                    if (!isAuto) {
-                        msg.className = 'error';
-                        msg.innerText = data.error || 'Неверный ключ доступа';
-                    } else {
-                        localStorage.removeItem('gta_tracker_active_key');
-                    }
+                    msg.className = 'error
+git add index.html && git commit -m "Force update login form" && git push -u origin main --force
+cd ~/Desktop/"GTA TRACKER"
+cat << 'EOF' > index.html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTA RP Tracker - Угон транспорта</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --danger: #ef4444;
+            --success: #10b981;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { width: 100%; max-width: 650px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        h1, h2 { text-align: center; margin-bottom: 15px; }
+        .subtitle { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 14px; }
+        input, select { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; outline: none; }
+        input:focus, select:focus { border-color: var(--accent); }
+        button { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: #0f172a; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
+        button:hover { background: var(--accent-hover); }
+        .timer-display { text-align: center; font-size: 28px; font-weight: bold; color: var(--success); margin: 15px 0; background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .stat-card { background: var(--bg-color); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-align: center; }
+        .stat-card span { display: block; font-size: 22px; font-weight: bold; color: var(--accent); margin-top: 5px; }
+        .history-list { margin-top: 20px; max-height: 150px; overflow-y: auto; background: var(--bg-color); padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; }
+        .history-item { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GTA RP Tracker</h1>
+        <div class="subtitle">Управление угонами и таймер сдачи транспорта</div>
+
+        <div class="form-group">
+            <label>Выберите автомобиль / уровень</label>
+            <select id="carSelect">
+                <optgroup label="Обычные авто">
+                    <option value="Karin Sultan|15000">Karin Sultan ($15,000)</option>
+                    <option value="Benefactor Schafter|18000">Benefactor Schafter ($18,000)</option>
+                    <option value="Lampadati Felon|22000">Lampadati Felon ($22,000)</option>
+                </optgroup>
+                <optgroup label="Элитный 7 уровень">
+                    <option value="Pfister Comet S2|45000">Pfister Comet S2 ($45,000)</option>
+                    <option value="Obey Tailgater S|50000">Obey Tailgater S ($50,000)</option>
+                    <option value="Übermacht Sentinel XS|60000">Übermacht Sentinel XS ($60,000)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <button onclick="startTracker()">Начать угон / Запустить таймер</button>
+
+        <div class="timer-display" id="timer">00:00</div>
+
+        <div class="stats-grid">
+            <div class="stat-card">Всего угонов <span id="totalThefts">0</span></div>
+            <div class="stat-card">Заработано ($) <span id="totalEarned">0</span></div>
+        </div>
+
+        <div class="history-list" id="historyList">
+            <div style="color: var(--text-muted); text-align: center;">История угонов пуста</div>
+        </div>
+    </div>
+
+    <script>
+        let countdown;
+
+        function startTracker() {
+            const select = document.getElementById('carSelect');
+            const [carName, rewardStr] = select.value.split('|');
+            const reward = parseInt(rewardStr);
+
+            // Запускаем таймер (например, 3 минуты на сдачу)
+            let timeLeft = 180; 
+            clearInterval(countdown);
+
+            countdown = setInterval(() => {
+                let minutes = Math.floor(timeLeft / 60);
+                let seconds = timeLeft % 60;
+                document.getElementById('timer').innerText = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+                if (timeLeft <= 0) {
+                    clearInterval(countdown);
+                    document.getElementById('timer').innerText = 'Время вышло!';
+                    addStats(carName, reward);
                 }
-            } catch (err) {
-                if (!isAuto) {
-                    msg.className = 'error';
-                    msg.innerText = 'Сервер просыпается. Подождите 10 секунд и нажмите "Войти" еще раз.';
-                }
-            }
+                timeLeft--;
+            }, 1000);
+        }
+
+        function addStats(car, reward) {
+            let stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0, "history": []}');
+            stats.count += 1;
+            stats.earned += reward;
+            stats.history.unshift({ car, reward, time: new Date().toLocaleTimeString() });
+
+            localStorage.setItem('gta_tracker_stats', JSON.stringify(stats));
+            loadStats();
         }
 
         function loadStats() {
-            const stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0}');
+            let stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0, "history": []}');
             document.getElementById('totalThefts').innerText = stats.count;
             document.getElementById('totalEarned').innerText = stats.earned;
+
+            const historyEl = document.getElementById('historyList');
+            if (stats.history.length > 0) {
+                historyEl.innerHTML = stats.history.map(item => `
+                    <div class="history-item">
+                        <span>${item.car} (+${item.reward}$)</span>
+                        <span style="color: var(--text-muted);">${item.time}</span>
+                    </div>
+                `).join('');
+            }
         }
 
-        function addTheft() {
-            const model = document.getElementById('carModel').value;
-            const reward = parseInt(document.getElementById('carReward').value) || 0;
-            if (!model) { alert('Введите модель транспорта'); return; }
-
-            let stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0}');
-            stats.count += 1;
-            stats.earned += reward;
-            localStorage.setItem('gta_tracker_stats', JSON.stringify(stats));
-
-            document.getElementById('carModel').value = '';
-            document.getElementById('carReward').value = '';
-            loadStats();
-            alert('Угон успешно добавлен в статистику!');
-        }
-
-        function logout() {
-            localStorage.removeItem('gta_tracker_active_key');
-            location.reload();
-        }
+        window.onload = loadStats;
     </script>
 </body>
 </html>
