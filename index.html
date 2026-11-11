@@ -553,6 +553,7 @@
             let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
 
             let theftStats = {};
+            let courierStats = {};
             let resellerStats = {};
             let casinoStats = {};
 
@@ -560,7 +561,7 @@
                 let login = u.login;
                 if (!login || login.startsWith("Игрок_") || login === "Игрок" || login === "Неизвестный") return;
 
-                // Угонщик (+ Закладчик добавляется в общую копилку фарма)
+                // 1. Угон авто
                 if (u.history) {
                     u.history.forEach(h => {
                         if (h.status !== 'caught') {
@@ -578,17 +579,18 @@
                     });
                 }
 
+                // 2. Закладчки
                 if (u.courierHistory) {
                     u.courierHistory.forEach(c => {
                         let day = c.date || todayStr;
-                        if (!theftStats[login]) theftStats[login] = { todayCount: 0, todayEarned: 0, totalCount: 0, totalEarned: 0 };
+                        if (!courierStats[login]) courierStats[login] = { todayCount: 0, todayEarned: 0, totalCount: 0, totalEarned: 0 };
                         
-                        theftStats[login].totalCount += c.count;
-                        theftStats[login].totalEarned += c.earned;
+                        courierStats[login].totalCount += c.count;
+                        courierStats[login].totalEarned += c.earned;
 
                         if (day === todayStr) {
-                            theftStats[login].todayCount += c.count;
-                            theftStats[login].todayEarned += c.earned;
+                            courierStats[login].todayCount += c.count;
+                            courierStats[login].todayEarned += c.earned;
                         }
                     });
                 }
@@ -626,25 +628,43 @@
                 }
             });
 
-            // 1. Угонщики / Фарм
+            // 1. Рейтинг угонщиков (Авто)
             let theftArray = Object.keys(theftStats).map(login => ({ login, ...theftStats[login] }));
             theftArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
             let theftTbody = document.getElementById('rating-theft-list');
             if (theftArray.length === 0) {
-                theftTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по фарму</td></tr>`;
+                theftTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по угонам</td></tr>`;
             } else {
                 theftTbody.innerHTML = theftArray.map((item, idx) => `
                     <tr>
                         <td>#${idx + 1} <strong>${item.login}</strong></td>
-                        <td>${item.todayCount} ед. (${item.totalCount} за всё время)</td>
+                        <td>${item.todayCount} маш. (${item.totalCount} за всё время)</td>
                         <td style="color: var(--success);">${item.todayEarned.toLocaleString()} ₽</td>
                         <td>${item.totalEarned.toLocaleString()} ₽</td>
                     </tr>
                 `).join('');
             }
 
-            // 2. Перекупы
+            // 2. Рейтинг закладчиков
+            let courierArray = Object.keys(courierStats).map(login => ({ login, ...courierStats[login] }));
+            courierArray.sort((a, b) => b.todayEarned - a.todayEarned);
+
+            let courierTbody = document.getElementById('rating-courier-list');
+            if (courierArray.length === 0) {
+                courierTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по закладкам</td></tr>`;
+            } else {
+                courierTbody.innerHTML = courierArray.map((item, idx) => `
+                    <tr>
+                        <td>#${idx + 1} <strong>${item.login}</strong></td>
+                        <td>${item.todayCount} шт. (${item.totalCount} за всё время)</td>
+                        <td style="color: var(--success);">${item.todayEarned.toLocaleString()} ₽</td>
+                        <td>${item.totalEarned.toLocaleString()} ₽</td>
+                    </tr>
+                `).join('');
+            }
+
+            // 3. Перекупы
             let resellerArray = Object.keys(resellerStats).map(login => ({ login, ...resellerStats[login] }));
             resellerArray.sort((a, b) => b.totalProfit - a.totalProfit);
 
@@ -665,7 +685,7 @@
                 }).join('');
             }
 
-            // 3. Казино
+            // 4. Казино
             let casinoArray = Object.keys(casinoStats).map(login => ({ login, ...casinoStats[login] }));
             casinoArray.sort((a, b) => b.net - a.net);
 
@@ -943,7 +963,6 @@
             await setDoc(docRef, userData, { merge: true });
         }
 
-        // Логика Закладчика
         async function addCourierRecord() {
             let pricePerOne = parseFloat(document.getElementById('courier-price').value) || 0;
             let count = parseInt(document.getElementById('courier-count').value) || 0;
@@ -1210,7 +1229,6 @@
 
             let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
             
-            // Подсчет Фарма (Угон + Закладчик)
             let todayHistory = userData.history.filter(h => h.date === todayStr);
             let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
             let theftEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
@@ -1227,7 +1245,6 @@
             if (todayCountEl) todayCountEl.textContent = totalTodayCount;
             if (todayEarnedEl) todayEarnedEl.textContent = totalTodayEarned.toLocaleString() + ' ₽';
 
-            // Рендер таблиц истории угонов и закладчика
             let tbody = document.getElementById('history-list');
             if (tbody) {
                 if (userData.history.length === 0) {
@@ -1279,7 +1296,6 @@
                 }
             }
 
-            // Рендер истории закладчика
             let courierTbody = document.getElementById('courier-history-list');
             let courierList = userData.courierHistory || [];
             if (courierTbody) {
@@ -1659,10 +1675,10 @@
                 <div class="card">
                     <h2>📦 Учет закладок</h2>
                     <label for="courier-price">Оплата за 1 закладку (₽):</label>
-                    <input type="number" id="courier-price" placeholder="Например, 15000">
+                    <input type="number" id="courier-price" placeholder="Например, 1000">
 
                     <label for="courier-count" style="margin-top: 15px; display: block;">Количество развезённых закладок:</label>
-                    <input type="number" id="courier-count" placeholder="Например, 25">
+                    <input type="number" id="courier-count" placeholder="Например, 20">
 
                     <button id="btn-add-courier" style="margin-top: 20px;">Рассчитать и записать в доход</button>
                 </div>
@@ -1743,17 +1759,34 @@
         <!-- Раздел Рейтинг -->
         <div id="tab-rating" class="tab-content">
             <div class="card">
-                <h2>🏆 Рейтинг фарма (Угон & Закладки)</h2>
+                <h2>🏆 Рейтинг угонщиков (Авто)</h2>
                 <table>
                     <thead>
                         <tr>
                             <th>Логин игрока</th>
-                            <th>Единиц за сегодня</th>
+                            <th>Машин за сегодня</th>
                             <th>Заработано за сегодня</th>
                             <th>Всего за всё время</th>
                         </tr>
                     </thead>
                     <tbody id="rating-theft-list">
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>📦 Рейтинг закладчиков</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Логин игрока</th>
+                            <th>Закладок за сегодня</th>
+                            <th>Заработано за сегодня</th>
+                            <th>Всего за всё время</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rating-courier-list">
                         <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
                     </tbody>
                 </table>
