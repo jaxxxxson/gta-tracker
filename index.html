@@ -145,6 +145,7 @@
             border-radius: 8px;
             border: 1px solid var(--border);
             margin-bottom: 20px;
+            font-size: 0.9rem;
         }
         .button-group {
             display: flex;
@@ -222,6 +223,8 @@
         let currentUser = null;
         let userData = { history: [], activeTheft: null };
         let timerInterval = null;
+        let subInterval = null;
+        let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
             const levelSelect = document.getElementById('level-select');
@@ -249,14 +252,13 @@
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     if (user.email !== ADMIN_EMAIL) {
-                        // Проверяем срок подписки для обычного пользователя
                         let docRef = doc(db, "system", "config");
                         let docSnap = await getDoc(docRef);
                         if (docSnap.exists()) {
                             let allowedMap = docSnap.data().allowedUsersMap || {};
-                            let expiryDate = allowedMap[user.email];
+                            userExpiryTime = allowedMap[user.email] || 0;
                             
-                            if (!expiryDate || Date.now() > expiryDate) {
+                            if (!userExpiryTime || Date.now() > userExpiryTime) {
                                 alert("Срок действия вашей подписки истек!");
                                 await signOut(auth);
                                 return;
@@ -265,6 +267,8 @@
                             await signOut(auth);
                             return;
                         }
+                    } else {
+                        userExpiryTime = Date.now() + (365 * 24 * 60 * 60 * 1000); // Админу вечно
                     }
 
                     currentUser = user;
@@ -279,9 +283,19 @@
                         document.getElementById('admin-panel').style.display = 'none';
                     }
 
+                    if (!subInterval) {
+                        subInterval = setInterval(updateSubscriptionCountdown, 1000);
+                    }
+                    updateSubscriptionCountdown();
+
                     await loadUserData();
                 } else {
                     currentUser = null;
+                    userExpiryTime = 0;
+                    if (subInterval) {
+                        clearInterval(subInterval);
+                        subInterval = null;
+                    }
                     document.getElementById('auth-section').style.display = 'block';
                     document.getElementById('app-section').style.display = 'none';
                 }
@@ -290,6 +304,40 @@
             setInterval(updateClock, 1000);
             updateClock();
         });
+
+        function formatTimeRemaining(ms) {
+            if (ms <= 0) return "Истекла";
+            let totalSec = Math.floor(ms / 1000);
+            let days = Math.floor(totalSec / (3600 * 24));
+            let hours = Math.floor((totalSec % (3600 * 24)) / 3600);
+            let minutes = Math.floor((totalSec % 3600) / 60);
+            let seconds = totalSec % 60;
+
+            if (days > 0) {
+                return `${days} дн. ${hours} ч. ${minutes} мин.`;
+            } else {
+                return `${hours} ч. ${minutes} мин. ${seconds} сек.`;
+            }
+        }
+
+        function updateSubscriptionCountdown() {
+            if (!currentUser) return;
+            let subEl = document.getElementById('sub-countdown');
+            if (!subEl) return;
+
+            if (currentUser.email === ADMIN_EMAIL) {
+                subEl.textContent = "Безлимитно (Администратор)";
+                return;
+            }
+
+            let diff = userExpiryTime - Date.now();
+            if (diff <= 0) {
+                subEl.textContent = "Истекла";
+                signOut(auth);
+            } else {
+                subEl.textContent = formatTimeRemaining(diff);
+            }
+        }
 
         async function loadAllowedUsers() {
             let docRef = doc(db, "system", "config");
@@ -305,14 +353,14 @@
                     let now = Date.now();
                     tbody.innerHTML = emails.map(email => {
                         let expiry = allowedMap[email];
-                        let daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
-                        let statusText = daysLeft > 0 ? `Действует (осталось ${daysLeft} дн.)` : `Истекла`;
-                        let statusColor = daysLeft > 0 ? `var(--success)` : `var(--danger)`;
+                        let diff = expiry - now;
+                        let timeStr = formatTimeRemaining(diff);
+                        let statusColor = diff > 0 ? `var(--success)` : `var(--danger)`;
 
                         return `
                             <tr>
                                 <td>${email}</td>
-                                <td style="color: ${statusColor};">${statusText}</td>
+                                <td style="color: ${statusColor}; font-weight: bold;">${timeStr}</td>
                                 <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${email}')" title="Удалить">✕</button></td>
                             </tr>
                         `;
@@ -327,7 +375,7 @@
             let emailInput = document.getElementById('new-allowed-email');
             let daysInput = document.getElementById('new-allowed-days');
             let email = emailInput.value.trim().toLowerCase();
-            let days = parseInt(daysInput.value) || 30;
+            let days = parseFloat(daysInput.value) || 30;
 
             if (!email) return;
 
@@ -338,7 +386,6 @@
                 allowedMap = docSnap.data().allowedUsersMap || {};
             }
 
-            // Вычисляем дату окончания (текущее время + дни в миллисекундах)
             let expiryTime = Date.now() + (days * 24 * 60 * 60 * 1000);
             allowedMap[email] = expiryTime;
 
@@ -346,7 +393,7 @@
             emailInput.value = '';
             daysInput.value = '30';
             await loadAllowedUsers();
-            alert(`Доступ для ${email} выдан на ${days} дней!`);
+            alert(`Доступ для ${email} успешно выдан / продлен!`);
         }
 
         window.removeAllowedUser = async function(email) {
@@ -678,7 +725,8 @@
 
     <div id="app-section" style="display:none;">
         <div class="user-bar">
-            <span>Вы вошли как: <strong id="user-email"></strong></span>
+            <div>Вы вошли как: <strong id="user-email"></strong></div>
+            <div>Подписка: <span id="sub-countdown" style="color: var(--success); font-weight: bold;">--</span></div>
             <button id="btn-logout" class="danger" style="width: auto; padding: 6px 12px; margin: 0;">Выйти</button>
         </div>
 
@@ -687,8 +735,8 @@
             <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Управление доступом и сроком подписки пользователей</p>
             
             <input type="email" id="new-allowed-email" placeholder="email@example.com">
-            <label for="new-allowed-days" style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок подписки (в днях):</label>
-            <input type="number" id="new-allowed-days" value="30" min="1">
+            <label for="new-allowed-days" style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок подписки (в днях, можно с дробями, например 0.5 для 12 часов):</label>
+            <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
             <button id="btn-add-allowed">Выдать / продлить доступ</button>
             
             <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки пользователей:</h3>
@@ -696,7 +744,7 @@
                 <thead>
                     <tr>
                         <th>Email</th>
-                        <th>Статус / Срок</th>
+                        <th>Осталось времени</th>
                         <th style="width: 40px;"></th>
                     </tr>
                 </thead>
