@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Помощник GTA RP (Фарм & Угонщик)</title>
+    <title>Помощник GTA RP (Фарм)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -31,11 +31,11 @@
         h1, h2 {
             text-align: center;
         }
-        /* Навигация / Оглавление */
+        /* Главное оглавление: Фарм */
         .nav-tabs {
             display: flex;
             gap: 10px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         .nav-btn {
             flex: 1;
@@ -56,6 +56,32 @@
             color: var(--text-color);
             border-color: var(--accent);
         }
+
+        /* Подраздел внутри Фарма */
+        .sub-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding-left: 20px;
+            border-left: 3px solid var(--accent);
+        }
+        .sub-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #1e293b;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .sub-btn.active {
+            background: #2563eb;
+            color: var(--text-color);
+            border-color: #2563eb;
+        }
+
         .tab-content {
             display: none;
         }
@@ -275,15 +301,15 @@
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Переключение вкладок (оглавление)
-            const tabBtns = document.querySelectorAll('.nav-btn');
-            tabBtns.forEach(btn => {
+            // Переключение подразделов внутри Фарма
+            const subBtns = document.querySelectorAll('.sub-btn');
+            subBtns.forEach(btn => {
                 btn.addEventListener('click', () => {
-                    tabBtns.forEach(b => b.classList.remove('active'));
+                    subBtns.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    let tabName = btn.getAttribute('data-tab');
-                    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-                    document.getElementById('tab-' + tabName).classList.add('active');
+                    let subName = btn.getAttribute('data-sub');
+                    document.querySelectorAll('.sub-content').forEach(sc => sc.classList.remove('active'));
+                    document.getElementById('sub-' + subName).classList.add('active');
                 });
             });
 
@@ -830,78 +856,79 @@
             </table>
         </div>
 
-        <!-- Оглавление (Выбор разделов) -->
+        <!-- Главное оглавление: Фарм -->
         <div class="nav-tabs">
             <button class="nav-btn active" data-tab="farm">💰 Фарм</button>
-            <button class="nav-btn" data-tab="theft">🚗 Угонщик</button>
         </div>
 
-        <!-- Раздел: Фарм -->
+        <!-- Раздел Фарм -->
         <div id="tab-farm" class="tab-content active">
-            <div class="card">
-                <h2>Раздел фармящих механик</h2>
-                <p style="text-align: center; color: var(--text-muted);">Здесь в будущем будут размещены инструменты и калькуляторы для фарма.</p>
-            </div>
-        </div>
-
-        <!-- Раздел: Угонщик (Трекер) -->
-        <div id="tab-theft" class="tab-content">
-            <div class="clock-box">
-                Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
-                Status: <span id="time-status" style="font-weight: bold;">--</span>
+            
+            <!-- Подразделы внутри Фарма -->
+            <div class="sub-tabs">
+                <button class="sub-btn active" data-sub="theft">🚗 Угонщик</button>
             </div>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div>Угонов за сегодня</div>
-                    <div id="today-count" class="stat-value">0</div>
+            <!-- Подраздел: Угонщик -->
+            <div id="sub-theft" class="sub-content active">
+                <div class="clock-box">
+                    Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
+                    Status: <span id="time-status" style="font-weight: bold;">--</span>
                 </div>
-                <div class="stat-card">
-                    <div>Заработано за сегодня</div>
-                    <div id="today-earned" class="stat-value">0 ₽</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div>Угонов за сегодня</div>
+                        <div id="today-count" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div>Заработано за сегодня</div>
+                        <div id="today-earned" class="stat-value">0 ₽</div>
+                    </div>
+                </div>
+
+                <div class="card" id="active-panel" style="display:none;">
+                    <h2>Активный угон</h2>
+                    <p>Автомобиль: <strong id="active-car-name"></strong></p>
+                    <p>Прошло времени:</p>
+                    <div id="active-timer" class="timer-display">00:00</div>
+                    <div class="button-group">
+                        <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
+                        <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
+                    </div>
+                </div>
+
+                <div class="card" id="start-panel">
+                    <h2>Начать новый угон</h2>
+                    <label for="level-select">Выберите уровень:</label>
+                    <select id="level-select"></select>
+
+                    <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
+                    <select id="car-select"></select>
+
+                    <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
+                    <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
+                </div>
+
+                <div class="card">
+                    <h2>История угонов</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Автомобиль</th>
+                                <th>Время</th>
+                                <th>Затрачено</th>
+                                <th>Результат / Цена</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-list">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="card" id="active-panel" style="display:none;">
-                <h2>Активный угон</h2>
-                <p>Автомобиль: <strong id="active-car-name"></strong></p>
-                <p>Прошло времени:</p>
-                <div id="active-timer" class="timer-display">00:00</div>
-                <div class="button-group">
-                    <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
-                    <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
-                </div>
-            </div>
-
-            <div class="card" id="start-panel">
-                <h2>Начать новый угон</h2>
-                <label for="level-select">Выберите уровень:</label>
-                <select id="level-select"></select>
-
-                <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
-                <select id="car-select"></select>
-
-                <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
-                <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
-            </div>
-
-            <div class="card">
-                <h2>История угонов</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Автомобиль</th>
-                            <th>Время</th>
-                            <th>Затрачено</th>
-                            <th>Результат / Цена</th>
-                            <th style="width: 40px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-list">
-                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
 
     </div>
