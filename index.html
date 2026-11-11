@@ -378,7 +378,7 @@
 
         let currentUser = null;
         let currentLogin = "";
-        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
+        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [] };
         let timerInterval = null;
         let subInterval = null;
         let globalRefreshInterval = null;
@@ -407,6 +407,19 @@
                     e.preventDefault();
                     let tabName = btn.getAttribute('data-tab');
                     switchTab(tabName, true);
+                });
+            });
+
+            // Подразделы во вкладке Фарм
+            const farmSubBtns = document.querySelectorAll('#tab-farm .sub-btn');
+            farmSubBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    farmSubBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    let targetSub = btn.getAttribute('data-sub');
+                    document.querySelectorAll('.farm-sub-content').forEach(sc => sc.style.display = 'none');
+                    document.getElementById('farm-sub-' + targetSub).style.display = 'block';
                 });
             });
 
@@ -445,6 +458,7 @@
             document.getElementById('btn-add-allowed').addEventListener('click', addAllowedUser);
             document.getElementById('btn-add-reseller-item').addEventListener('click', addResellerItem);
             document.getElementById('btn-add-dice').addEventListener('click', addDiceGame);
+            document.getElementById('btn-add-courier').addEventListener('click', addCourierRecord);
 
             updateCarList();
 
@@ -495,7 +509,6 @@
                     await loadUserData();
                     await loadGlobalRatings();
 
-                    // Автообновление рейтингов каждые 5 минут (300000 мс)
                     if (!globalRefreshInterval) {
                         globalRefreshInterval = setInterval(loadGlobalRatings, 300000);
                     }
@@ -545,10 +558,9 @@
 
             usersList.forEach(u => {
                 let login = u.login;
-                // Строгая проверка: если у пользователя нет реального логина (или это заглушка), пропускаем его
                 if (!login || login.startsWith("Игрок_") || login === "Игрок" || login === "Неизвестный") return;
 
-                // Угонщик
+                // Угонщик (+ Закладчик добавляется в общую копилку фарма)
                 if (u.history) {
                     u.history.forEach(h => {
                         if (h.status !== 'caught') {
@@ -562,6 +574,21 @@
                                 theftStats[login].todayCount++;
                                 theftStats[login].todayEarned += (h.price || 0);
                             }
+                        }
+                    });
+                }
+
+                if (u.courierHistory) {
+                    u.courierHistory.forEach(c => {
+                        let day = c.date || todayStr;
+                        if (!theftStats[login]) theftStats[login] = { todayCount: 0, todayEarned: 0, totalCount: 0, totalEarned: 0 };
+                        
+                        theftStats[login].totalCount += c.count;
+                        theftStats[login].totalEarned += c.earned;
+
+                        if (day === todayStr) {
+                            theftStats[login].todayCount += c.count;
+                            theftStats[login].todayEarned += c.earned;
                         }
                     });
                 }
@@ -599,18 +626,18 @@
                 }
             });
 
-            // 1. Угонщики
+            // 1. Угонщики / Фарм
             let theftArray = Object.keys(theftStats).map(login => ({ login, ...theftStats[login] }));
             theftArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
             let theftTbody = document.getElementById('rating-theft-list');
             if (theftArray.length === 0) {
-                theftTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по угонам</td></tr>`;
+                theftTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по фарму</td></tr>`;
             } else {
                 theftTbody.innerHTML = theftArray.map((item, idx) => `
                     <tr>
                         <td>#${idx + 1} <strong>${item.login}</strong></td>
-                        <td>${item.todayCount} маш. (${item.totalCount} за всё время)</td>
+                        <td>${item.todayCount} ед. (${item.totalCount} за всё время)</td>
                         <td style="color: var(--success);">${item.todayEarned.toLocaleString()} ₽</td>
                         <td>${item.totalEarned.toLocaleString()} ₽</td>
                     </tr>
@@ -901,8 +928,9 @@
                 userData.login = currentLogin;
                 if (!userData.resellerItems) userData.resellerItems = [];
                 if (!userData.diceHistory) userData.diceHistory = [];
+                if (!userData.courierHistory) userData.courierHistory = [];
             } else {
-                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
+                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [] };
             }
             await saveUserData();
             renderState();
@@ -913,6 +941,44 @@
             userData.login = currentLogin;
             let docRef = doc(db, "users", currentUser.uid);
             await setDoc(docRef, userData, { merge: true });
+        }
+
+        // Логика Закладчика
+        async function addCourierRecord() {
+            let pricePerOne = parseFloat(document.getElementById('courier-price').value) || 0;
+            let count = parseInt(document.getElementById('courier-count').value) || 0;
+
+            if (pricePerOne <= 0 || count <= 0) {
+                alert("Введите корректную цену за 1 закладку и количество!");
+                return;
+            }
+
+            let earned = pricePerOne * count;
+            let now = new Date();
+
+            let record = {
+                id: Date.now(),
+                pricePerOne: pricePerOne,
+                count: count,
+                earned: earned,
+                time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+            };
+
+            userData.courierHistory.unshift(record);
+            await saveUserData();
+
+            document.getElementById('courier-count').value = "";
+            renderState();
+            loadGlobalRatings();
+            alert(`Успешно записано! Заработано: ${earned.toLocaleString()} ₽`);
+        }
+
+        window.deleteCourierItem = async function(id) {
+            userData.courierHistory = userData.courierHistory.filter(c => c.id !== id);
+            await saveUserData();
+            renderState();
+            loadGlobalRatings();
         }
 
         async function addDiceGame() {
@@ -1143,17 +1209,25 @@
             }
 
             let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+            
+            // Подсчет Фарма (Угон + Закладчик)
             let todayHistory = userData.history.filter(h => h.date === todayStr);
+            let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
+            let theftEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
+
+            let todayCourier = (userData.courierHistory || []).filter(c => c.date === todayStr);
+            let courierEarned = todayCourier.reduce((sum, c) => sum + c.earned, 0);
+            let courierCount = todayCourier.reduce((sum, c) => sum + c.count, 0);
+
+            let totalTodayCount = successfulThefts.length + courierCount;
+            let totalTodayEarned = theftEarned + courierEarned;
 
             let todayCountEl = document.getElementById('today-count');
             let todayEarnedEl = document.getElementById('today-earned');
+            if (todayCountEl) todayCountEl.textContent = totalTodayCount;
+            if (todayEarnedEl) todayEarnedEl.textContent = totalTodayEarned.toLocaleString() + ' ₽';
 
-            let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
-            if (todayCountEl) todayCountEl.textContent = successfulThefts.length;
-            
-            let totalEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
-            if (todayEarnedEl) todayEarnedEl.textContent = totalEarned.toLocaleString() + ' ₽';
-
+            // Рендер таблиц истории угонов и закладчика
             let tbody = document.getElementById('history-list');
             if (tbody) {
                 if (userData.history.length === 0) {
@@ -1202,6 +1276,25 @@
                         });
                     }
                     tbody.innerHTML = html;
+                }
+            }
+
+            // Рендер истории закладчика
+            let courierTbody = document.getElementById('courier-history-list');
+            let courierList = userData.courierHistory || [];
+            if (courierTbody) {
+                if (courierList.length === 0) {
+                    courierTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей о закладках</td></tr>`;
+                } else {
+                    courierTbody.innerHTML = courierList.map(item => `
+                        <tr>
+                            <td>${item.date} ${item.time}</td>
+                            <td>${item.pricePerOne.toLocaleString()} ₽</td>
+                            <td>${item.count} шт.</td>
+                            <td style="color: var(--success); font-weight: bold;">+${item.earned.toLocaleString()} ₽</td>
+                            <td style="text-align: right;"><button class="delete-btn" onclick="deleteCourierItem(${item.id})">✕</button></td>
+                        </tr>
+                    `).join('');
                 }
             }
 
@@ -1494,67 +1587,103 @@
             </div>
         </div>
 
-        <!-- Раздел Фарм -->
+        <!-- Раздел Фарм (с подразделами Угонщик и Закладчик) -->
         <div id="tab-farm" class="tab-content">
             <div class="sub-tabs">
-                <span class="sub-btn active">🚗 Угонщик</span>
+                <a href="#" class="sub-btn active" data-sub="theft">🚗 Угонщик</a>
+                <a href="#" class="sub-btn" data-sub="courier">📦 Закладчик</a>
             </div>
 
-            <div class="clock-box">
-                Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
-                Status: <span id="time-status" style="font-weight: bold;">--</span>
-            </div>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div>Угонов за сегодня</div>
-                    <div id="today-count" class="stat-value">0</div>
+            <!-- Подраздел: Угонщик -->
+            <div id="farm-sub-theft" class="farm-sub-content">
+                <div class="clock-box">
+                    Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
+                    Status: <span id="time-status" style="font-weight: bold;">--</span>
                 </div>
-                <div class="stat-card">
-                    <div>Заработано за сегодня</div>
-                    <div id="today-earned" class="stat-value">0 ₽</div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div>Фарма за сегодня (Всего)</div>
+                        <div id="today-count" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div>Заработано за сегодня</div>
+                        <div id="today-earned" class="stat-value">0 ₽</div>
+                    </div>
+                </div>
+
+                <div class="card" id="active-panel" style="display:none;">
+                    <h2>Активный угон</h2>
+                    <p>Автомобиль: <strong id="active-car-name"></strong></p>
+                    <p>Прошло времени:</p>
+                    <div id="active-timer" class="timer-display">00:00</div>
+                    <div class="button-group">
+                        <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
+                        <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
+                    </div>
+                </div>
+
+                <div class="card" id="start-panel">
+                    <h2>Начать новый угон</h2>
+                    <label for="level-select">Выберите уровень:</label>
+                    <select id="level-select"></select>
+
+                    <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
+                    <select id="car-select"></select>
+
+                    <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
+                    <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
+                </div>
+
+                <div class="card">
+                    <h2>История угонов</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Автомобиль</th>
+                                <th>Время</th>
+                                <th>Затрачено</th>
+                                <th>Результат / Цена</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-list">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
-            <div class="card" id="active-panel" style="display:none;">
-                <h2>Активный угон</h2>
-                <p>Автомобиль: <strong id="active-car-name"></strong></p>
-                <p>Прошло времени:</p>
-                <div id="active-timer" class="timer-display">00:00</div>
-                <div class="button-group">
-                    <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
-                    <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
+            <!-- Подраздел: Закладчик -->
+            <div id="farm-sub-courier" class="farm-sub-content" style="display: none;">
+                <div class="card">
+                    <h2>📦 Учет закладок</h2>
+                    <label for="courier-price">Оплата за 1 закладку (₽):</label>
+                    <input type="number" id="courier-price" placeholder="Например, 15000">
+
+                    <label for="courier-count" style="margin-top: 15px; display: block;">Количество развезённых закладок:</label>
+                    <input type="number" id="courier-count" placeholder="Например, 25">
+
+                    <button id="btn-add-courier" style="margin-top: 20px;">Рассчитать и записать в доход</button>
                 </div>
-            </div>
 
-            <div class="card" id="start-panel">
-                <h2>Начать новый угон</h2>
-                <label for="level-select">Выберите уровень:</label>
-                <select id="level-select"></select>
-
-                <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
-                <select id="car-select"></select>
-
-                <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
-                <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
-            </div>
-
-            <div class="card">
-                <h2>История угонов</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Автомобиль</th>
-                            <th>Время</th>
-                            <th>Затрачено</th>
-                            <th>Результат / Цена</th>
-                            <th style="width: 40px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-list">
-                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
-                    </tbody>
-                </table>
+                <div class="card">
+                    <h2>История закладок</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Время</th>
+                                <th>Цена за 1 шт.</th>
+                                <th>Количество</th>
+                                <th>Заработано</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="courier-history-list">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей о закладках</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -1614,12 +1743,12 @@
         <!-- Раздел Рейтинг -->
         <div id="tab-rating" class="tab-content">
             <div class="card">
-                <h2>🏆 Рейтинг угонщиков (Фарм)</h2>
+                <h2>🏆 Рейтинг фарма (Угон & Закладки)</h2>
                 <table>
                     <thead>
                         <tr>
                             <th>Логин игрока</th>
-                            <th>Машин за сегодня</th>
+                            <th>Единиц за сегодня</th>
                             <th>Заработано за сегодня</th>
                             <th>Всего за всё время</th>
                         </tr>
