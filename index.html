@@ -114,6 +114,12 @@
             color: var(--success);
             margin-top: 5px;
         }
+        .timer-display {
+            font-size: 1.2rem;
+            color: var(--accent);
+            margin: 10px 0;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -140,7 +146,8 @@
     <div class="card" id="active-panel" style="display:none;">
         <h2>Активный угон</h2>
         <p>Автомобиль: <strong id="active-car-name"></strong></p>
-        <p>Статус: <span style="color: var(--success);">В процессе...</span></p>
+        <p>Прошло времени:</p>
+        <div id="active-timer" class="timer-display">00:00</div>
         <button class="danger" onclick="finishTheft()">Закончить сдачу</button>
     </div>
 
@@ -159,11 +166,12 @@
                 <tr>
                     <th>Автомобиль</th>
                     <th>Время сдачи</th>
+                    <th>Затрачено</th>
                     <th>Цена</th>
                 </tr>
             </thead>
             <tbody id="history-list">
-                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
             </tbody>
         </table>
     </div>
@@ -186,6 +194,7 @@
 
     let activeTheft = JSON.parse(localStorage.getItem('activeTheft')) || null;
     let history = JSON.parse(localStorage.getItem('theftHistory')) || [];
+    let timerInterval = null;
 
     const selectEl = document.getElementById('car-select');
     cars.forEach((car, index) => {
@@ -201,7 +210,7 @@
         let hours = date.getHours();
         let minutes = date.getMinutes();
         let totalMins = hours * 60 + minutes;
-        return totalMins >= 60 && totalMins < 540;
+        return totalMins >= 60 && totalMins < 540; // 01:00 - 09:00 МСК
     }
 
     function updateClock() {
@@ -238,7 +247,7 @@
         let idx = selectEl.value;
         activeTheft = {
             carIndex: idx,
-            startTime: new Date().toISOString()
+            startTime: Date.now()
         };
         localStorage.setItem('activeTheft', JSON.stringify(activeTheft));
         renderState();
@@ -246,6 +255,13 @@
 
     function finishTheft() {
         if (!activeTheft) return;
+        let nowTime = Date.now();
+        let elapsedMs = nowTime - activeTheft.startTime;
+        let elapsedSec = Math.floor(elapsedMs / 1000);
+        let mins = Math.floor(elapsedSec / 60);
+        let secs = elapsedSec % 60;
+        let durationStr = `${mins} мин ${secs} сек`;
+
         let now = new Date();
         let night = isNightTime(now);
         let car = cars[activeTheft.carIndex];
@@ -254,6 +270,7 @@
         let record = {
             name: car.name,
             time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+            duration: durationStr,
             price: price,
             date: now.toDateString()
         };
@@ -266,14 +283,32 @@
         renderState();
     }
 
+    function updateActiveTimer() {
+        if (!activeTheft) return;
+        let elapsedSec = Math.floor((Date.now() - activeTheft.startTime) / 1000);
+        let mins = Math.floor(elapsedSec / 60);
+        let secs = elapsedSec % 60;
+        document.getElementById('active-timer').textContent = 
+            String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+
     function renderState() {
         if (activeTheft) {
             document.getElementById('active-panel').style.display = 'block';
             document.getElementById('start-panel').style.display = 'none';
             document.getElementById('active-car-name').textContent = cars[activeTheft.carIndex].name;
+            
+            if (!timerInterval) {
+                timerInterval = setInterval(updateActiveTimer, 1000);
+            }
+            updateActiveTimer();
         } else {
             document.getElementById('active-panel').style.display = 'none';
             document.getElementById('start-panel').style.display = 'block';
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
         }
 
         let todayStr = new Date().toDateString();
@@ -285,12 +320,13 @@
 
         let tbody = document.getElementById('history-list');
         if (todayHistory.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
         } else {
             tbody.innerHTML = todayHistory.map(item => `
                 <tr>
                     <td>${item.name}</td>
                     <td>${item.time}</td>
+                    <td>${item.duration}</td>
                     <td>${item.price.toLocaleString()} ₽</td>
                 </tr>
             `).join('');
