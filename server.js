@@ -10,6 +10,11 @@ const supabaseUrl = process.env.SUPABASE_URL || 'https://wyfkpmoyaeilxsgvnwgd.su
 const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5ZmtwbW95YWVpbHhzZ3Zud2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg2Mzh9.u8Y9aZgN_n2P3Kx7qQ0tL5V8W1m3J2s6X4v5b9n2m1s';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Эндпоинт для пинга (пробуждения сервера)
+app.get('/api/ping', (req, res) => {
+    res.json({ success: true, message: 'Server is awake' });
+});
+
 app.post('/api/verify-key', async (req, res) => {
     const { key, device_id } = req.body;
 
@@ -47,5 +52,5 @@ app.post('/api/verify-key', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
