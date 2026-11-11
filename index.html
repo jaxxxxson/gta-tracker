@@ -16,7 +16,6 @@
             --danger-hover: #dc2626;
             --success: #22c55e;
             --border: #334155;
-            --admin-bg: #334155;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -169,11 +168,17 @@
             color: var(--danger);
             background: transparent;
         }
+        .day-header {
+            background: #0f172a;
+            color: var(--accent);
+            font-weight: bold;
+            text-align: center;
+        }
     </style>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -248,7 +253,6 @@
                     document.getElementById('app-section').style.display = 'block';
                     document.getElementById('user-email').textContent = user.email;
 
-                    // Проверяем, админ ли это
                     if (user.email === ADMIN_EMAIL) {
                         document.getElementById('admin-panel').style.display = 'block';
                         await loadAllowedEmails();
@@ -328,7 +332,10 @@
             let carSelect = document.getElementById('car-select');
             carSelect.innerHTML = '';
             
-            let cars = carsByLevel[level];
+            let cars = [...carsByLevel[level]];
+            // Сортировка машин по алфавиту
+            cars.sort((a, b) => a.name.localeCompare(b.name));
+
             if (cars.length === 0) {
                 let opt = document.createElement('option');
                 opt.textContent = "Для этого уровня машины еще не добавлены";
@@ -337,14 +344,20 @@
                 document.getElementById('selected-car-info').textContent = "";
             } else {
                 document.getElementById('btn-start').disabled = false;
-                cars.forEach((car, index) => {
+                cars.forEach((car) => {
                     let opt = document.createElement('option');
-                    opt.value = index;
+                    opt.value = car.name; // Храним имя для надежности
                     opt.textContent = car.name;
                     carSelect.appendChild(opt);
                 });
             }
             updateCarInfo();
+        }
+
+        function getSelectedCar() {
+            let level = document.getElementById('level-select').value;
+            let carName = document.getElementById('car-select').value;
+            return carsByLevel[level].find(c => c.name === carName);
         }
 
         function isNightTime(date) {
@@ -375,20 +388,15 @@
         }
 
         function updateCarInfo() {
-            let levelEl = document.getElementById('level-select');
             let infoEl = document.getElementById('selected-car-info');
-            if (!levelEl || !infoEl) return;
+            if (!infoEl) return;
 
-            let level = levelEl.value;
-            let cars = carsByLevel[level];
-            let idx = document.getElementById('car-select').value;
-            
-            if (!cars || cars.length === 0 || idx === "") {
+            let car = getSelectedCar();
+            if (!car) {
                 infoEl.textContent = "";
                 return;
             }
 
-            let car = cars[idx];
             let night = isNightTime(new Date());
             let currentPrice = night ? car.night : car.day;
             infoEl.innerHTML = `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${currentPrice.toLocaleString()} ₽</strong>`;
@@ -398,7 +406,6 @@
             let emailInput = document.getElementById('auth-email').value.trim().toLowerCase();
             let pass = document.getElementById('auth-pass').value;
 
-            // Проверяем белый список перед регистрацией
             try {
                 let docRef = doc(db, "system", "config");
                 let docSnap = await getDoc(docRef);
@@ -407,7 +414,6 @@
                     allowedEmails = docSnap.data().allowedEmails || [];
                 }
 
-                // Админ может зарегистрироваться в любом случае, остальные — только по списку
                 if (emailInput !== ADMIN_EMAIL && !allowedEmails.includes(emailInput)) {
                     alert("Доступ ограничен! Ваш email не найден в списке разрешенных. Обратитесь к администратору для покупки доступа.");
                     return;
@@ -450,10 +456,12 @@
 
         async function startTheft() {
             let level = document.getElementById('level-select').value;
-            let idx = document.getElementById('car-select').value;
+            let car = getSelectedCar();
+            if (!car) return;
+
             userData.activeTheft = {
                 level: level,
-                carIndex: idx,
+                carName: car.name,
                 startTime: Date.now()
             };
             await saveUserData();
@@ -469,16 +477,17 @@
 
             let now = new Date();
             let night = isNightTime(now);
-            let car = carsByLevel[userData.activeTheft.level][userData.activeTheft.carIndex];
+            let level = userData.activeTheft.level;
+            let car = carsByLevel[level].find(c => c.name === userData.activeTheft.carName);
             let price = night ? car.night : car.day;
 
             let record = {
                 name: car.name,
-                level: userData.activeTheft.level,
+                level: level,
                 time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                 duration: durationStr,
                 price: price,
-                date: now.toDateString(),
+                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }),
                 status: 'success'
             };
 
@@ -496,15 +505,13 @@
             let durationStr = `${mins} мин ${secs} сек`;
 
             let now = new Date();
-            let car = carsByLevel[userData.activeTheft.level][userData.activeTheft.carIndex];
-
             let record = {
-                name: car.name,
+                name: userData.activeTheft.carName,
                 level: userData.activeTheft.level,
                 time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                 duration: durationStr,
                 price: 0,
-                date: now.toDateString(),
+                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }),
                 status: 'caught'
             };
 
@@ -538,10 +545,9 @@
                 if (activePanel) activePanel.style.display = 'block';
                 if (startPanel) startPanel.style.display = 'none';
                 
-                let car = carsByLevel[userData.activeTheft.level][userData.activeTheft.carIndex];
                 let carNameEl = document.getElementById('active-car-name');
-                if (carNameEl && car) {
-                    carNameEl.textContent = `${car.name} (${userData.activeTheft.level} уровень)`;
+                if (carNameEl) {
+                    carNameEl.textContent = `${userData.activeTheft.carName} (${userData.activeTheft.level} уровень)`;
                 }
                 
                 if (!timerInterval) {
@@ -559,7 +565,7 @@
                 }
             }
 
-            let todayStr = new Date().toDateString();
+            let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
             let todayHistory = userData.history.filter(h => h.date === todayStr);
 
             let todayCountEl = document.getElementById('today-count');
@@ -573,35 +579,54 @@
 
             let tbody = document.getElementById('history-list');
             if (tbody) {
-                if (todayHistory.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
+                if (userData.history.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>`;
                 } else {
-                    tbody.innerHTML = todayHistory.map((item, originalIndex) => {
-                        let globalIndex = userData.history.indexOf(item);
-                        let deleteBtn = `<button class="delete-btn" onclick="deleteHistoryItem(${globalIndex})" title="Удалить запись">✕</button>`;
-                        
-                        if (item.status === 'caught') {
-                            return `
-                                <tr class="caught-row">
-                                    <td>${item.name} (${item.level} ур.)</td>
-                                    <td>${item.time}</td>
-                                    <td>${item.duration}</td>
-                                    <td>Поймали менты (0 ₽)</td>
-                                    <td style="text-align: right;">${deleteBtn}</td>
-                                </tr>
-                            `;
-                        } else {
-                            return `
-                                <tr>
-                                    <td>${item.name} (${item.level} ур.)</td>
-                                    <td>${item.time}</td>
-                                    <td>${item.duration}</td>
-                                    <td>${item.price.toLocaleString()} ₽</td>
-                                    <td style="text-align: right;">${deleteBtn}</td>
-                                </tr>
-                            `;
-                        }
-                    }).join('');
+                    // Группируем историю по дням
+                    let grouped = {};
+                    userData.history.forEach((item, globalIndex) => {
+                        let dayKey = item.date || 'Сегодня';
+                        if (!grouped[dayKey]) grouped[dayKey] = [];
+                        grouped[dayKey].push({ item, globalIndex });
+                    });
+
+                    let html = '';
+                    for (let day in grouped) {
+                        // Считаем итог дня по успешным угонам
+                        let daySuccessful = grouped[day].filter(g => g.item.status !== 'caught');
+                        let dayEarned = daySuccessful.reduce((sum, g) => sum + g.item.price, 0);
+
+                        html += `<tr class="day-header"><td colspan="5">📅 ${day} | Успешных угонов: ${daySuccessful.length} | Заработано: ${dayEarned.toLocaleString()} ₽</td></tr>`;
+
+                        grouped[day].forEach(g => {
+                            let item = g.item;
+                            let globalIndex = g.globalIndex;
+                            let deleteBtn = `<button class="delete-btn" onclick="deleteHistoryItem(${globalIndex})" title="Удалить запись">✕</button>`;
+
+                            if (item.status === 'caught') {
+                                html += `
+                                    <tr class="caught-row">
+                                        <td>${item.name} (${item.level} ур.)</td>
+                                        <td>${item.time}</td>
+                                        <td>${item.duration}</td>
+                                        <td>Поймали менты (0 ₽)</td>
+                                        <td style="text-align: right;">${deleteBtn}</td>
+                                    </tr>
+                                `;
+                            } else {
+                                html += `
+                                    <tr>
+                                        <td>${item.name} (${item.level} ур.)</td>
+                                        <td>${item.time}</td>
+                                        <td>${item.duration}</td>
+                                        <td>${item.price.toLocaleString()} ₽</td>
+                                        <td style="text-align: right;">${deleteBtn}</td>
+                                    </tr>
+                                `;
+                            }
+                        });
+                    }
+                    tbody.innerHTML = html;
                 }
             }
         }
@@ -626,7 +651,6 @@
             <button id="btn-logout" class="danger" style="width: auto; padding: 6px 12px; margin: 0;">Выйти</button>
         </div>
 
-        <!-- Админ-панель (видна только вам) -->
         <div id="admin-panel" class="card admin-card" style="display:none;">
             <h2>👑 Панель администратора</h2>
             <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Добавьте email покупателя, чтобы он мог зарегистрироваться на сайте</p>
@@ -687,7 +711,7 @@
         </div>
 
         <div class="card">
-            <h2>История угонов за сегодня</h2>
+            <h2>История угонов</h2>
             <table>
                 <thead>
                     <tr>
@@ -699,7 +723,7 @@
                     </tr>
                 </thead>
                 <tbody id="history-list">
-                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
                 </tbody>
             </table>
         </div>
