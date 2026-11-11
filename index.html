@@ -384,8 +384,27 @@
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
+            // Обработка перенаправления от 404.html (если пользователь обновил страницу на подразделе)
+            (function() {
+                var redirect = sessionStorage.redirect;
+                delete sessionStorage.redirect;
+                if (redirect && redirect != location.href) {
+                    history.replaceState(null, null, redirect);
+                }
+            })();
+
+            // Поддержка перенаправления через параметры (из 404.html)
+            let queryParams = new URLSearchParams(window.location.search);
+            let pParam = queryParams.get('p');
+            if (pParam) {
+                let cleanPath = pParam.replace('/', '');
+                if (['perekup', 'farm', 'casino'].includes(cleanPath)) {
+                    history.replaceState(null, null, '/' + cleanPath);
+                }
+            }
+
             const mainTabs = document.querySelectorAll('.nav-btn');
-            
+
             function switchTab(tabName, pushState = true) {
                 mainTabs.forEach(b => b.classList.remove('active'));
                 let targetBtn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
@@ -457,7 +476,7 @@
                         if (docSnap.exists()) {
                             let allowedMap = docSnap.data().allowedUsersMap || {};
                             userExpiryTime = allowedMap[currentLogin] || 0;
-                            
+
                             if (!userExpiryTime || Date.now() > userExpiryTime) {
                                 alert("Срок действия вашей подписки истек!");
                                 await signOut(auth);
@@ -562,7 +581,7 @@
             if (docSnap.exists()) {
                 let allowedMap = docSnap.data().allowedUsersMap || {};
                 let logins = Object.keys(allowedMap);
-                
+
                 if (logins.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
                 } else {
@@ -627,7 +646,7 @@
             let level = document.getElementById('level-select').value;
             let carSelect = document.getElementById('car-select');
             carSelect.innerHTML = '';
-            
+
             let cars = [...carsByLevel[level]];
             cars.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -667,7 +686,7 @@
             let mskString = now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
             let timeEl = document.getElementById('msk-time');
             if (timeEl) timeEl.textContent = mskString;
-            
+
             let night = isNightTime(now);
             let statusEl = document.getElementById('time-status');
             if (statusEl) {
@@ -964,12 +983,12 @@
                 let startPanel = document.getElementById('start-panel');
                 if (activePanel) activePanel.style.display = 'block';
                 if (startPanel) startPanel.style.display = 'none';
-                
+
                 let carNameEl = document.getElementById('active-car-name');
                 if (carNameEl) {
                     carNameEl.textContent = `${userData.activeTheft.carName} (${userData.activeTheft.level} уровень)`;
                 }
-                
+
                 if (!timerInterval) {
                     timerInterval = setInterval(updateActiveTimer, 1000);
                 }
@@ -994,7 +1013,7 @@
 
             let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
             if (todayCountEl) todayCountEl.textContent = successfulThefts.length;
-            
+
             let totalEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
             if (todayEarnedEl) todayEarnedEl.textContent = totalEarned.toLocaleString() + ' ₽';
 
@@ -1163,7 +1182,7 @@
 
             document.getElementById('dice-stat-wins').textContent = totalWins.toLocaleString() + ' ₽';
             document.getElementById('dice-stat-losses').textContent = totalLosses.toLocaleString() + ' ₽';
-            
+
             let netEl = document.getElementById('dice-stat-net');
             netEl.textContent = netProfit.toLocaleString() + ' ₽';
             netEl.style.color = netProfit >= 0 ? 'var(--success)' : 'var(--danger)';
