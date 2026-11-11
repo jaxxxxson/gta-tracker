@@ -26,16 +26,14 @@
         input { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; outline: none; }
         input:focus { border-color: var(--accent); }
         button { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: #0f172a; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
-        button:hover:not(:disabled) { background: var(--accent-hover); }
-        button:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+        button:hover { background: var(--accent-hover); }
         .hidden { display: none !important; }
-        #message { margin-top: 15px; text-align: center; font-size: 14px; }
+        #message { margin-top: 15px; text-align: center; font-size: 14px; font-weight: 500; }
         .error { color: var(--danger); }
         .success { color: var(--success); }
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .stat-card { background: var(--bg-color); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-align: center; }
         .stat-card span { display: block; font-size: 22px; font-weight: bold; color: var(--accent); margin-top: 5px; }
-        #server-status { font-size: 13px; text-align: center; margin-bottom: 15px; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -43,12 +41,11 @@
         <div id="auth-screen">
             <h1>GTA RP Tracker</h1>
             <div class="subtitle">Введите ваш персональный ключ доступа</div>
-            <div id="server-status" style="color: var(--text-muted);">Проверка связи с сервером...</div>
             <div class="form-group">
                 <label>Ключ активации</label>
                 <input type="text" id="accessKey" placeholder="GTA-TEST-..." autocomplete="off">
             </div>
-            <button id="loginBtn" onclick="verifyKey()" disabled>Сервер просыпается...</button>
+            <button id="loginBtn" onclick="verifyKey()">Войти в систему</button>
             <div id="message"></div>
         </div>
 
@@ -88,36 +85,12 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            checkServer();
             const savedKey = localStorage.getItem('gta_tracker_active_key');
             if (savedKey) {
                 document.getElementById('accessKey').value = savedKey;
                 verifyKey(true);
             }
         });
-
-        async function checkServer() {
-            const statusEl = document.getElementById('server-status');
-            const btn = document.getElementById('loginBtn');
-            
-            try {
-                const res = await fetch(`${API_URL}/api/ping`);
-                if (res.ok) {
-                    statusEl.innerText = '● Сервер готов к работе';
-                    statusEl.style.color = 'var(--success)';
-                    btn.disabled = false;
-                    btn.innerText = 'Войти в систему';
-                } else {
-                    throw new Error();
-                }
-            } catch (e) {
-                statusEl.innerText = '⏳ Сервер просыпается после сна, подождите пару секунд...';
-                statusEl.style.color = '#f59e0b';
-                btn.disabled = true;
-                btn.innerText = 'Сервер просыпается...';
-                setTimeout(checkServer, 4000);
-            }
-        }
 
         async function verifyKey(isAuto = false) {
             const key = document.getElementById('accessKey').value.trim();
@@ -129,7 +102,7 @@
                 return;
             }
 
-            if (!isAuto) { msg.className = ''; msg.innerText = 'Проверка ключа в базе данных...'; }
+            if (!isAuto) { msg.className = ''; msg.innerText = 'Проверка ключа...'; }
 
             try {
                 const response = await fetch(`${API_URL}/api/verify-key`, {
@@ -157,7 +130,7 @@
             } catch (err) {
                 if (!isAuto) {
                     msg.className = 'error';
-                    msg.innerText = 'Ошибка соединения. Попробуйте еще раз.';
+                    msg.innerText = 'Сервер просыпается. Подождите 10 секунд и нажмите "Войти" еще раз.';
                 }
             }
         }
