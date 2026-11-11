@@ -250,6 +250,20 @@
             border: 1px solid var(--border);
             vertical-align: middle;
             margin-right: 10px;
+            cursor: pointer;
+        }
+        .paste-zone {
+            border: 2px dashed var(--border);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            color: var(--text-muted);
+            margin-top: 10px;
+            cursor: pointer;
+            background: #0f172a;
+        }
+        .paste-zone:hover {
+            border-color: var(--accent);
         }
     </style>
 
@@ -317,9 +331,9 @@
         let timerInterval = null;
         let subInterval = null;
         let userExpiryTime = 0;
+        let currentUploadedImage = "";
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Переключение главных разделов (Перекуп / Фарм)
             const mainTabs = document.querySelectorAll('.nav-btn');
             mainTabs.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -329,6 +343,26 @@
                     document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
                     document.getElementById('tab-' + tabName).classList.add('active');
                 });
+            });
+
+            // Обработка вставки скриншота через Ctrl+V или клик по зоне загрузки
+            const pasteZone = document.getElementById('paste-zone');
+            const fileInput = document.getElementById('file-input');
+
+            pasteZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                let file = e.target.files[0];
+                if (file) handleImageFile(file);
+            });
+
+            window.addEventListener('paste', (e) => {
+                let items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                for (let item of items) {
+                    if (item.kind === 'file') {
+                        let file = item.getAsFile();
+                        if (file) handleImageFile(file);
+                    }
+                }
             });
 
             const levelSelect = document.getElementById('level-select');
@@ -415,6 +449,16 @@
             setInterval(updateClock, 1000);
             updateClock();
         });
+
+        function handleImageFile(file) {
+            let reader = new FileReader();
+            reader.onload = function(event) {
+                currentUploadedImage = event.target.result;
+                let zone = document.getElementById('paste-zone');
+                zone.innerHTML = `<img src="${currentUploadedImage}" style="max-height: 80px; border-radius: 4px;"><br><small style="color: var(--success);">Скриншот успешно прикреплен!</small>`;
+            };
+            reader.readAsDataURL(file);
+        }
 
         function formatTimeRemaining(ms) {
             if (ms <= 0) return "Истекла";
@@ -671,11 +715,9 @@
             await setDoc(docRef, userData);
         }
 
-        // Логика Перекупа
         async function addResellerItem() {
             let name = document.getElementById('res-name').value.trim();
             let buyPrice = parseFloat(document.getElementById('res-buy').value) || 0;
-            let imageUrl = document.getElementById('res-img').value.trim();
             let isRedemption = document.getElementById('res-redemption').checked;
             let owner = document.getElementById('res-owner').value.trim();
 
@@ -688,24 +730,25 @@
                 id: Date.now(),
                 name: name,
                 buyPrice: buyPrice,
-                sellPrice: 0, // пока не продано
-                imageUrl: imageUrl,
+                sellPrice: 0,
+                imageUrl: currentUploadedImage,
                 isRedemption: isRedemption,
                 owner: isRedemption ? owner : "",
                 startTime: Date.now(),
-                status: "active" // active, sold
+                status: "active"
             };
 
             userData.resellerItems.unshift(newItem);
             await saveUserData();
 
-            // Очищаем форму
+            // Сброс формы
             document.getElementById('res-name').value = "";
             document.getElementById('res-buy').value = "";
-            document.getElementById('res-img').value = "";
             document.getElementById('res-redemption').checked = false;
             document.getElementById('res-owner').value = "";
             document.getElementById('res-owner-box').style.display = 'none';
+            currentUploadedImage = "";
+            document.getElementById('paste-zone').innerHTML = `Нажмите сюда или вставьте скриншот (Ctrl + V)`;
 
             renderState();
             alert("Вещь успешно добавлена в учет!");
@@ -721,7 +764,7 @@
             if (!item) return;
 
             let priceStr = prompt(`За сколько вы продали вещь "${item.name}"?`, item.buyPrice);
-            if (priceStr === null) return; // отмена
+            if (priceStr === null) return;
 
             let sellPrice = parseFloat(priceStr);
             if (isNaN(sellPrice)) {
@@ -955,7 +998,7 @@
                     let redemptionInfo = item.isRedemption ? `<br><small style="color: var(--accent);">Под выкуп от: ${item.owner}</small>` : "";
                     let elapsedMs = Date.now() - item.startTime;
                     let timerStr = item.isRedemption ? `<br><small style="color: var(--success);" class="res-timer" data-start="${item.startTime}">Прошло: ${formatElapsedTime(elapsedMs)}</small>` : "";
-                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.style.display='none'">` : "";
+                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onclick="window.open('${item.imageUrl}')">` : "";
 
                     return `
                         <tr>
@@ -983,7 +1026,7 @@
                 tbody.innerHTML = activeItems.map(item => {
                     let redemptionInfo = item.isRedemption ? `Владелец (выкуп): ${item.owner}` : "Собственный товар";
                     let elapsedMs = Date.now() - item.startTime;
-                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.style.display='none'">` : "";
+                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onclick="window.open('${item.imageUrl}')">` : "";
                     return `
                         <tr>
                             <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong><br><small style="color: var(--text-muted);">${redemptionInfo}</small></div></div></td>
@@ -1011,7 +1054,7 @@
                     let statusText = item.status === 'sold' ? `<span style="color: var(--success);">Продано за ${item.sellPrice.toLocaleString()} ₽</span>` : `<span style="color: var(--accent);">В продаже</span>`;
                     let profit = item.status === 'sold' ? (item.sellPrice - item.buyPrice) : 0;
                     let profitStr = item.status === 'sold' ? `(Прибыль: ${profit.toLocaleString()} ₽)` : "";
-                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.style.display='none'">` : "";
+                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onclick="window.open('${item.imageUrl}')">` : "";
 
                     return `
                         <tr>
@@ -1073,7 +1116,7 @@
             </table>
         </div>
 
-        <!-- Главное оглавление: Перекуп первым, Фарм вторым -->
+        <!-- Главное оглавление: Перекуп первый, Фарм второй -->
         <div class="nav-tabs">
             <button class="nav-btn active" data-tab="reseller">📈 Перекуп</button>
             <button class="nav-btn" data-tab="farm">💰 Фарм</button>
@@ -1101,13 +1144,17 @@
                     </div>
                 </div>
 
-                <!-- Форма добавления лота -->
+                <!-- Форма добавления лота с поддержкой скриншотов -->
                 <div class="card">
                     <h2>➕ Добавить вещь / лот</h2>
                     <input type="text" id="res-name" placeholder="Название вещи (например, Кобура серая гучи)">
                     <input type="number" id="res-buy" placeholder="Цена покупки (₽)">
-                    <input type="text" id="res-img" placeholder="Ссылка на скриншот/картинку (необязательно)">
                     
+                    <div id="paste-zone" class="paste-zone">
+                        Нажмите сюда или вставьте скриншот (Ctrl + V)
+                    </div>
+                    <input type="file" id="file-input" accept="image/*" style="display: none;">
+
                     <div style="margin-top: 15px;">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                             <input type="checkbox" id="res-redemption" style="width: auto;" onchange="toggleRedemptionBox(this)">
