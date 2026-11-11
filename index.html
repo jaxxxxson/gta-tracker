@@ -785,7 +785,7 @@
                             <tr>
                                 <td>${login}</td>
                                 <td style="color: ${statusColor}; font-weight: bold;">${timeStr}</td>
-                                <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${login}')" title="Удалить подписку">✕</button></td>
+                                <td style="text-align: right;"><button type="button" class="delete-btn" onclick="removeAllowedUser('${login}')" title="Удалить подписку">✕</button></td>
                             </tr>
                         `;
                     }).join('');
@@ -820,10 +820,8 @@
             alert(`Доступ для логина "${login}" успешно выдан / продлен!`);
         }
 
-        // Автоматическое удаление подписки через панель сайта
+        // Исправленная и стабильная функция удаления подписки
         window.removeAllowedUser = async function(login) {
-            if (!confirm(`Вы уверены, что хотите забрать подписку у пользователя "${login}"?`)) return;
-
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
@@ -831,7 +829,6 @@
                 delete allowedMap[login];
                 await setDoc(docRef, { allowedUsersMap: allowedMap }, { merge: true });
                 await loadAllowedUsers();
-                alert(`Подписка у пользователя "${login}" успешно забрана!`);
             }
         }
 
@@ -1872,7 +1869,7 @@
                 <label for="debt-person">Имя / Логин человека:</label>
                 <input type="text" id="debt-person" placeholder="Например, Максим">
 
-                <label for="debt-amount" style="margin-top: 15px; display: block;">Сумма (₽):</label>
+-                <label for="debt-amount" style="margin-top: 15px; display: block;">Сумма (₽):</label>
                 <input type="text" id="debt-amount" placeholder="Например, 1 000 000" oninput="formatMoneyInput(this)">
 
                 <label for="debt-type" style="margin-top: 15px; display: block;">Тип долга:</label>
