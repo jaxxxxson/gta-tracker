@@ -527,6 +527,7 @@
 
                 usersSnapshot.forEach(docSnap => {
                     let uData = docSnap.data();
+                    uData._docId = docSnap.id;
                     allUsersData.push(uData);
                 });
 
@@ -544,8 +545,8 @@
             let casinoStats = {};
 
             usersList.forEach(u => {
-                let login = u.login;
-                if (!login || login === "Игрок" || login === "Неизвестный") return; // пропускаем старые пустые аккаунты
+                // Берем логин из документа, либо используем часть ID документа, если поле логина еще не записано
+                let login = u.login || `Игрок_${u._docId.substring(0, 5)}`;
 
                 // Угонщик
                 if (u.history) {
@@ -897,13 +898,13 @@
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 userData = docSnap.data();
-                userData.login = currentLogin; // принудительно обновляем логин в документе
+                userData.login = currentLogin;
                 if (!userData.resellerItems) userData.resellerItems = [];
                 if (!userData.diceHistory) userData.diceHistory = [];
             } else {
                 userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
             }
-            await saveUserData(); // сразу сохраняем актуальный логин в базе
+            await saveUserData();
             renderState();
         }
 
@@ -911,7 +912,7 @@
             if (!currentUser) return;
             userData.login = currentLogin;
             let docRef = doc(db, "users", currentUser.uid);
-            await setDoc(docRef, userData);
+            await setDoc(docRef, userData, { merge: true });
         }
 
         async function addDiceGame() {
