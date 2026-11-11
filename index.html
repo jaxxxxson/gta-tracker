@@ -192,11 +192,16 @@
             measurementId: "G-ZM1R53R9MH"
         };
 
-        const ADMIN_EMAIL = "jecknikon@gmail.com";
+        const ADMIN_LOGIN = "admin"; // Ваш логин администратора
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+
+        // Функция для преобразования логина во внутренний фиктивный email для Firebase Auth
+        function loginToEmail(login) {
+            return login.trim().toLowerCase() + "@gta-tracker.local";
+        }
 
         const carsByLevel = {
             1: [],
@@ -221,6 +226,7 @@
         };
 
         let currentUser = null;
+        let currentLogin = "";
         let userData = { history: [], activeTheft: null };
         let timerInterval = null;
         let subInterval = null;
@@ -251,12 +257,15 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    if (user.email !== ADMIN_EMAIL) {
+                    // Восстанавливаем логин из email
+                    currentLogin = user.email.split('@')[0];
+
+                    if (currentLogin !== ADMIN_LOGIN) {
                         let docRef = doc(db, "system", "config");
                         let docSnap = await getDoc(docRef);
                         if (docSnap.exists()) {
                             let allowedMap = docSnap.data().allowedUsersMap || {};
-                            userExpiryTime = allowedMap[user.email] || 0;
+                            userExpiryTime = allowedMap[currentLogin] || 0;
                             
                             if (!userExpiryTime || Date.now() > userExpiryTime) {
                                 alert("Срок действия вашей подписки истек!");
@@ -268,15 +277,15 @@
                             return;
                         }
                     } else {
-                        userExpiryTime = Date.now() + (365 * 24 * 60 * 60 * 1000); // Админу вечно
+                        userExpiryTime = Date.now() + (365 * 24 * 60 * 60 * 1000);
                     }
 
                     currentUser = user;
                     document.getElementById('auth-section').style.display = 'none';
                     document.getElementById('app-section').style.display = 'block';
-                    document.getElementById('user-email').textContent = user.email;
+                    document.getElementById('user-login').textContent = currentLogin;
 
-                    if (user.email === ADMIN_EMAIL) {
+                    if (currentLogin === ADMIN_LOGIN) {
                         document.getElementById('admin-panel').style.display = 'block';
                         await loadAllowedUsers();
                     } else {
@@ -291,6 +300,7 @@
                     await loadUserData();
                 } else {
                     currentUser = null;
+                    currentLogin = "";
                     userExpiryTime = 0;
                     if (subInterval) {
                         clearInterval(subInterval);
@@ -325,7 +335,7 @@
             let subEl = document.getElementById('sub-countdown');
             if (!subEl) return;
 
-            if (currentUser.email === ADMIN_EMAIL) {
+            if (currentLogin === ADMIN_LOGIN) {
                 subEl.textContent = "Безлимитно (Администратор)";
                 return;
             }
@@ -345,23 +355,23 @@
             let tbody = document.getElementById('allowed-list');
             if (docSnap.exists()) {
                 let allowedMap = docSnap.data().allowedUsersMap || {};
-                let emails = Object.keys(allowedMap);
+                let logins = Object.keys(allowedMap);
                 
-                if (emails.length === 0) {
+                if (logins.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
                 } else {
                     let now = Date.now();
-                    tbody.innerHTML = emails.map(email => {
-                        let expiry = allowedMap[email];
+                    tbody.innerHTML = logins.map(login => {
+                        let expiry = allowedMap[login];
                         let diff = expiry - now;
                         let timeStr = formatTimeRemaining(diff);
                         let statusColor = diff > 0 ? `var(--success)` : `var(--danger)`;
 
                         return `
                             <tr>
-                                <td>${email}</td>
+                                <td>${login}</td>
                                 <td style="color: ${statusColor}; font-weight: bold;">${timeStr}</td>
-                                <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${email}')" title="Удалить">✕</button></td>
+                                <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${login}')" title="Удалить">✕</button></td>
                             </tr>
                         `;
                     }).join('');
@@ -372,12 +382,12 @@
         }
 
         window.addAllowedUser = async function() {
-            let emailInput = document.getElementById('new-allowed-email');
+            let loginInput = document.getElementById('new-allowed-login');
             let daysInput = document.getElementById('new-allowed-days');
-            let email = emailInput.value.trim().toLowerCase();
+            let login = loginInput.value.trim().toLowerCase();
             let days = parseFloat(daysInput.value) || 30;
 
-            if (!email) return;
+            if (!login) return;
 
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
@@ -387,21 +397,21 @@
             }
 
             let expiryTime = Date.now() + (days * 24 * 60 * 60 * 1000);
-            allowedMap[email] = expiryTime;
+            allowedMap[login] = expiryTime;
 
             await setDoc(docRef, { allowedUsersMap: allowedMap }, { merge: true });
-            emailInput.value = '';
+            loginInput.value = '';
             daysInput.value = '30';
             await loadAllowedUsers();
-            alert(`Доступ для ${email} успешно выдан / продлен!`);
+            alert(`Доступ для логина "${login}" успешно выдан / продлен!`);
         }
 
-        window.removeAllowedUser = async function(email) {
+        window.removeAllowedUser = async function(login) {
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 let allowedMap = docSnap.data().allowedUsersMap || {};
-                delete allowedMap[email];
+                delete allowedMap[login];
                 await setDoc(docRef, { allowedUsersMap: allowedMap }, { merge: true });
                 await loadAllowedUsers();
             }
@@ -482,8 +492,13 @@
         }
 
         async function register() {
-            let emailInput = document.getElementById('auth-email').value.trim().toLowerCase();
+            let loginInput = document.getElementById('auth-login').value.trim().toLowerCase();
             let pass = document.getElementById('auth-pass').value;
+
+            if (!loginInput) {
+                alert("Введите логин!");
+                return;
+            }
 
             try {
                 let docRef = doc(db, "system", "config");
@@ -493,23 +508,31 @@
                     allowedMap = docSnap.data().allowedUsersMap || {};
                 }
 
-                let expiryTime = allowedMap[emailInput];
-                if (emailInput !== ADMIN_EMAIL && (!expiryTime || Date.now() > expiryTime)) {
-                    alert("Доступ ограничен! Ваш email не найден в списке активных подписок или срок её действия истек.");
+                let expiryTime = allowedMap[loginInput];
+                if (loginInput !== ADMIN_LOGIN && (!expiryTime || Date.now() > expiryTime)) {
+                    alert("Доступ ограничен! Этот логин не найден в списке активных подписок или срок её действия истек.");
                     return;
                 }
 
-                await createUserWithEmailAndPassword(auth, emailInput, pass);
+                let fakeEmail = loginToEmail(loginInput);
+                await createUserWithEmailAndPassword(auth, fakeEmail, pass);
             } catch (err) {
                 alert("Ошибка регистрации: " + err.message);
             }
         }
 
         async function login() {
-            let email = document.getElementById('auth-email').value;
+            let loginInput = document.getElementById('auth-login').value.trim().toLowerCase();
             let pass = document.getElementById('auth-pass').value;
+
+            if (!loginInput) {
+                alert("Введите логин!");
+                return;
+            }
+
             try {
-                await signInWithEmailAndPassword(auth, email, pass);
+                let fakeEmail = loginToEmail(loginInput);
+                await signInWithEmailAndPassword(auth, fakeEmail, pass);
             } catch (err) {
                 alert("Ошибка входа: " + err.message);
             }
@@ -717,7 +740,7 @@
 
     <div id="auth-section" class="card auth-container">
         <h2>Вход / Регистрация</h2>
-        <input type="email" id="auth-email" placeholder="Email">
+        <input type="text" id="auth-login" placeholder="Логин">
         <input type="password" id="auth-pass" placeholder="Пароль">
         <button id="btn-login">Войти</button>
         <button id="btn-register" class="secondary">Зарегистрироваться</button>
@@ -725,25 +748,25 @@
 
     <div id="app-section" style="display:none;">
         <div class="user-bar">
-            <div>Вы вошли как: <strong id="user-email"></strong></div>
+            <div>Логин: <strong id="user-login"></strong></div>
             <div>Подписка: <span id="sub-countdown" style="color: var(--success); font-weight: bold;">--</span></div>
             <button id="btn-logout" class="danger" style="width: auto; padding: 6px 12px; margin: 0;">Выйти</button>
         </div>
 
         <div id="admin-panel" class="card admin-card" style="display:none;">
             <h2>👑 Панель администратора</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Управление доступом и сроком подписки пользователей</p>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Управление доступом и сроком подписки по логинам</p>
             
-            <input type="email" id="new-allowed-email" placeholder="email@example.com">
-            <label for="new-allowed-days" style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок подписки (в днях, можно с дробями, например 0.5 для 12 часов):</label>
+            <input type="text" id="new-allowed-login" placeholder="Введите логин пользователя">
+            <label for="new-allowed-days" style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок подписки (в днях):</label>
             <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
             <button id="btn-add-allowed">Выдать / продлить доступ</button>
             
-            <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки пользователей:</h3>
+            <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки:</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>Email</th>
+                        <th>Логин</th>
                         <th>Осталось времени</th>
                         <th style="width: 40px;"></th>
                     </tr>
