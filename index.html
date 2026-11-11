@@ -42,7 +42,7 @@
         <div id="auth-screen">
             <h1>GTA RP Tracker</h1>
             <div class="subtitle">Введите ваш персональный ключ доступа</div>
-            <div id="server-status">Пробуждение сервера бэкенда...</div>
+            <div id="server-status">Проверка связи с сервером...</div>
             <div class="form-group">
                 <label>Ключ активации</label>
                 <input type="text" id="accessKey" placeholder="GTA-TEST-..." autocomplete="off">
@@ -100,12 +100,12 @@
             try {
                 const res = await fetch(`${API_URL}/api/ping`);
                 if (res.ok) {
-                    statusEl.innerText = 'Сервер активен и готов к работе';
+                    statusEl.innerText = 'Сервер активен';
                     statusEl.style.color = 'var(--success)';
                 }
             } catch (e) {
-                statusEl.innerText = 'Сервер просыпается, подождите пару секунд...';
-                setTimeout(wakeUpServer, 5000);
+                statusEl.innerText = 'Сервер просыпается...';
+                setTimeout(wakeUpServer, 3000);
             }
         }
 
@@ -113,7 +113,7 @@
             const key = document.getElementById('accessKey').value.trim();
             const msg = document.getElementById('message');
             const deviceId = getDeviceId();
-            
+
             if (!key) {
                 if (!isAuto) { msg.className = 'error'; msg.innerText = 'Введите ключ доступа!'; }
                 return;
@@ -139,7 +139,7 @@
                 } else {
                     if (!isAuto) {
                         msg.className = 'error';
-                        msg.innerText = data.error || 'Ошибка проверки ключа';
+                        msg.innerText = data.error || 'Неверный ключ доступа';
                     } else {
                         localStorage.removeItem('gta_tracker_active_key');
                     }
@@ -147,7 +147,7 @@
             } catch (err) {
                 if (!isAuto) {
                     msg.className = 'error';
-                    msg.innerText = 'Сервер спит. Подождите 10-20 секунд и нажмите еще раз.';
+                    msg.innerText = 'Ошибка сети или бэкенд недоступен.';
                 }
             }
         }
