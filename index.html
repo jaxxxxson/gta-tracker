@@ -321,7 +321,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAT03HslnNWesJcagAB-dFfITaQTrz8qw8",
@@ -381,30 +381,12 @@
         let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
         let timerInterval = null;
         let subInterval = null;
+        let globalRefreshInterval = null;
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Обработка перенаправления от 404.html (если пользователь обновил страницу на подразделе)
-            (function() {
-                var redirect = sessionStorage.redirect;
-                delete sessionStorage.redirect;
-                if (redirect && redirect != location.href) {
-                    history.replaceState(null, null, redirect);
-                }
-            })();
-
-            // Поддержка перенаправления через параметры (из 404.html)
-            let queryParams = new URLSearchParams(window.location.search);
-            let pParam = queryParams.get('p');
-            if (pParam) {
-                let cleanPath = pParam.replace('/', '');
-                if (['perekup', 'farm', 'casino'].includes(cleanPath)) {
-                    history.replaceState(null, null, '/' + cleanPath);
-                }
-            }
-
             const mainTabs = document.querySelectorAll('.nav-btn');
-
+            
             function switchTab(tabName, pushState = true) {
                 mainTabs.forEach(b => b.classList.remove('active'));
                 let targetBtn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
@@ -430,13 +412,13 @@
 
             window.addEventListener('popstate', (e) => {
                 let path = window.location.pathname.replace('/', '') || 'perekup';
-                if (['perekup', 'farm', 'casino'].includes(path)) {
+                if (['perekup', 'farm', 'casino', 'rating'].includes(path)) {
                     switchTab(path, false);
                 }
             });
 
             let initialPath = window.location.pathname.replace('/', '');
-            if (['perekup', 'farm', 'casino'].includes(initialPath)) {
+            if (['perekup', 'farm', 'casino', 'rating'].includes(initialPath)) {
                 switchTab(initialPath, false);
             } else {
                 switchTab('perekup', true);
@@ -476,7 +458,7 @@
                         if (docSnap.exists()) {
                             let allowedMap = docSnap.data().allowedUsersMap || {};
                             userExpiryTime = allowedMap[currentLogin] || 0;
-
+                            
                             if (!userExpiryTime || Date.now() > userExpiryTime) {
                                 alert("Срок действия вашей подписки истек!");
                                 await signOut(auth);
@@ -511,6 +493,12 @@
                     updateSubscriptionCountdown();
 
                     await loadUserData();
+                    await loadGlobalRatings();
+
+                    // Автообновление рейтингов каждую минуту
+                    if (!globalRefreshInterval) {
+                        globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
+                    }
                 } else {
                     currentUser = null;
                     currentLogin = "";
@@ -518,6 +506,10 @@
                     if (subInterval) {
                         clearInterval(subInterval);
                         subInterval = null;
+                    }
+                    if (globalRefreshInterval) {
+                        clearInterval(globalRefreshInterval);
+                        globalRefreshInterval = null;
                     }
                     document.getElementById('auth-section').style.display = 'block';
                     document.getElementById('app-section').style.display = 'none';
@@ -527,6 +519,147 @@
             setInterval(updateClock, 1000);
             updateClock();
         });
+
+        // Загрузка глобальных рейтингов со всех пользователей в Firebase
+        async function loadGlobalRatings() {
+            try {
+                let usersSnapshot = await getDocs(collection(db, "users"));
+                let allUsersData = [];
+
+                usersSnapshot.forEach(docSnap => {
+                    let uData = docSnap.data();
+                    // Вычисляем логин из ID или ищем в системе
+                    let uLogin = docSnap.id; // В нашей структуре doc.id это uid, но для удобства привяжем к логину
+                    allUsersData.push(uData);
+                });
+
+                renderRatings(allUsersData);
+            } catch (err) {
+                console.error("Ошибка загрузки рейтингов:", err);
+            }
+        }
+
+        function renderRatings(usersList) {
+            let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+
+            let theftStats = {};
+            let resellerStats = {};
+            let casinoStats = {};
+
+            // Собираем статистику по всем пользователям
+            // Поскольку uid в Firestore, нам нужно определить логин. Сохраним логин в userData при сохранении.
+            usersList.forEach(u => {
+                let login = u.login || "Игрок";
+
+                // Угонщик
+                if (u.history) {
+                    u.history.forEach(h => {
+                        if (h.status !== 'caught') {
+                            let day = h.date || todayStr;
+                            if (!theftStats[login]) theftStats[login] = { todayCount: 0, todayEarned: 0, totalCount: 0, totalEarned: 0 };
+                            
+                            theftStats[login].totalCount++;
+                            theftStats[login].totalEarned += (h.price || 0);
+
+                            if (day === todayStr) {
+                                theftStats[login].todayCount++;
+                                theftStats[login].todayEarned += (h.price || 0);
+                            }
+                        }
+                    });
+                }
+
+                // Перекуп
+                if (u.resellerItems) {
+                    u.resellerItems.forEach(item => {
+                        if (item.status === 'sold') {
+                            if (!resellerStats[login]) resellerStats[login] = { soldItems: [], totalProfit: 0, totalRevenue: 0 };
+                            let profit = item.sellPrice - item.buyPrice;
+                            resellerStats[login].totalProfit += profit;
+                            resellerStats[login].totalRevenue += item.sellPrice;
+                            resellerStats[login].soldItems.push({
+                                name: item.name,
+                                buy: item.buyPrice,
+                                sell: item.sellPrice,
+                                profit: profit
+                            });
+                        }
+                    });
+                }
+
+                // Казино
+                if (u.diceHistory) {
+                    u.diceHistory.forEach(d => {
+                        if (!casinoStats[login]) casinoStats[login] = { wins: 0, losses: 0, net: 0, history: [] };
+                        if (d.result === 'win') {
+                            casinoStats[login].wins += d.amount;
+                            casinoStats[login].net += d.amount;
+                        } else {
+                            casinoStats[login].losses += d.amount;
+                            casinoStats[login].net -= d.amount;
+                        }
+                        casinoStats[login].history.push(d);
+                    });
+                }
+            });
+
+            // 1. Рендер рейтинга угонщиков (Фарм)
+            let theftArray = Object.keys(theftStats).map(login => ({ login, ...theftStats[login] }));
+            theftArray.sort((a, b) => b.todayEarned - a.todayEarned); // Сортировка по заработку за сегодня
+
+            let theftTbody = document.getElementById('rating-theft-list');
+            if (theftArray.length === 0) {
+                theftTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по угонам</td></tr>`;
+            } else {
+                theftTbody.innerHTML = theftArray.map((item, idx) => `
+                    <tr>
+                        <td>#${idx + 1} <strong>${item.login}</strong></td>
+                        <td>${item.todayCount} маш. (${item.totalCount} за всё время)</td>
+                        <td style="color: var(--success);">${item.todayEarned.toLocaleString()} ₽</td>
+                        <td>${item.totalEarned.toLocaleString()} ₽</td>
+                    </tr>
+                `).join('');
+            }
+
+            // 2. Рендер рейтинга перекупов
+            let resellerArray = Object.keys(resellerStats).map(login => ({ login, ...resellerStats[login] }));
+            resellerArray.sort((a, b) => b.totalProfit - a.totalProfit);
+
+            let resellerTbody = document.getElementById('rating-reseller-list');
+            if (resellerArray.length === 0) {
+                resellerTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по продажам</td></tr>`;
+            } else {
+                resellerTbody.innerHTML = resellerArray.map((item, idx) => {
+                    let lastSold = item.soldItems[0] ? `${item.soldItems[0].name} (куп: ${item.soldItems[0].buy.toLocaleString()} ₽, продан за: ${item.soldItems[0].sell.toLocaleString()} ₽)` : "Нет продаж";
+                    return `
+                        <tr>
+                            <td>#${idx + 1} <strong>${item.login}</strong></td>
+                            <td>${lastSold}</td>
+                            <td style="color: var(--accent);">${item.totalRevenue.toLocaleString()} ₽</td>
+                            <td style="color: var(--success); font-weight: bold;">${item.totalProfit.toLocaleString()} ₽</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            // 3. Рендер рейтинга казино
+            let casinoArray = Object.keys(casinoStats).map(login => ({ login, ...casinoStats[login] }));
+            casinoArray.sort((a, b) => b.net - a.net);
+
+            let casinoTbody = document.getElementById('rating-casino-list');
+            if (casinoArray.length === 0) {
+                casinoTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по казино</td></tr>`;
+            } else {
+                casinoTbody.innerHTML = casinoArray.map((item, idx) => `
+                    <tr>
+                        <td>#${idx + 1} <strong>${item.login}</strong></td>
+                        <td style="color: var(--success);">+${item.wins.toLocaleString()} ₽</td>
+                        <td style="color: var(--danger);">-${item.losses.toLocaleString()} ₽</td>
+                        <td style="color: ${item.net >= 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: bold;">${item.net.toLocaleString()} ₽</td>
+                    </tr>
+                `).join('');
+            }
+        }
 
         function formatTimeRemaining(ms) {
             if (ms <= 0) return "Истекла";
@@ -581,7 +714,7 @@
             if (docSnap.exists()) {
                 let allowedMap = docSnap.data().allowedUsersMap || {};
                 let logins = Object.keys(allowedMap);
-
+                
                 if (logins.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
                 } else {
@@ -646,7 +779,7 @@
             let level = document.getElementById('level-select').value;
             let carSelect = document.getElementById('car-select');
             carSelect.innerHTML = '';
-
+            
             let cars = [...carsByLevel[level]];
             cars.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -686,7 +819,7 @@
             let mskString = now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
             let timeEl = document.getElementById('msk-time');
             if (timeEl) timeEl.textContent = mskString;
-
+            
             let night = isNightTime(now);
             let statusEl = document.getElementById('time-status');
             if (statusEl) {
@@ -769,10 +902,11 @@
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 userData = docSnap.data();
+                userData.login = currentLogin; // сохраняем логин в структуре для рейтингов
                 if (!userData.resellerItems) userData.resellerItems = [];
                 if (!userData.diceHistory) userData.diceHistory = [];
             } else {
-                userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
+                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
                 await setDoc(docRef, userData);
             }
             renderState();
@@ -780,6 +914,7 @@
 
         async function saveUserData() {
             if (!currentUser) return;
+            userData.login = currentLogin;
             let docRef = doc(db, "users", currentUser.uid);
             await setDoc(docRef, userData);
         }
@@ -807,12 +942,14 @@
 
             document.getElementById('dice-amount').value = "";
             renderState();
+            loadGlobalRatings();
         }
 
         window.deleteDiceItem = async function(id) {
             userData.diceHistory = userData.diceHistory.filter(d => d.id !== id);
             await saveUserData();
             renderState();
+            loadGlobalRatings();
         }
 
         async function addResellerItem() {
@@ -847,6 +984,7 @@
             document.getElementById('res-owner-box').style.display = 'none';
 
             renderState();
+            loadGlobalRatings();
             alert("Вещь успешно добавлена в учет!");
         }
 
@@ -873,12 +1011,14 @@
             item.soldTime = Date.now();
             await saveUserData();
             renderState();
+            loadGlobalRatings();
         }
 
         window.deleteResellerItem = async function(id) {
             userData.resellerItems = userData.resellerItems.filter(i => i.id !== id);
             await saveUserData();
             renderState();
+            loadGlobalRatings();
         }
 
         function updateResellerTimers() {
@@ -934,6 +1074,7 @@
             userData.activeTheft = null;
             await saveUserData();
             renderState();
+            loadGlobalRatings();
         }
 
         async function caughtByPolice() {
@@ -964,6 +1105,7 @@
             userData.history.splice(index, 1);
             await saveUserData();
             renderState();
+            loadGlobalRatings();
         }
 
         function updateActiveTimer() {
@@ -983,12 +1125,12 @@
                 let startPanel = document.getElementById('start-panel');
                 if (activePanel) activePanel.style.display = 'block';
                 if (startPanel) startPanel.style.display = 'none';
-
+                
                 let carNameEl = document.getElementById('active-car-name');
                 if (carNameEl) {
                     carNameEl.textContent = `${userData.activeTheft.carName} (${userData.activeTheft.level} уровень)`;
                 }
-
+                
                 if (!timerInterval) {
                     timerInterval = setInterval(updateActiveTimer, 1000);
                 }
@@ -1004,7 +1146,6 @@
                 }
             }
 
-            // Рендер Фарма (Угонщика)
             let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
             let todayHistory = userData.history.filter(h => h.date === todayStr);
 
@@ -1013,7 +1154,7 @@
 
             let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
             if (todayCountEl) todayCountEl.textContent = successfulThefts.length;
-
+            
             let totalEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
             if (todayEarnedEl) todayEarnedEl.textContent = totalEarned.toLocaleString() + ' ₽';
 
@@ -1068,13 +1209,10 @@
                 }
             }
 
-            // Рендер Перекупа
             renderResellerCabinet();
             renderResellerProperty();
             renderResellerLedger();
             renderResellerAnalytics();
-
-            // Рендер Казино (Кости)
             renderDiceState();
         }
 
@@ -1182,7 +1320,7 @@
 
             document.getElementById('dice-stat-wins').textContent = totalWins.toLocaleString() + ' ₽';
             document.getElementById('dice-stat-losses').textContent = totalLosses.toLocaleString() + ' ₽';
-
+            
             let netEl = document.getElementById('dice-stat-net');
             netEl.textContent = netProfit.toLocaleString() + ' ₽';
             netEl.style.color = netProfit >= 0 ? 'var(--success)' : 'var(--danger)';
@@ -1239,15 +1377,17 @@
                     <tr><th>Логин</th><th>Осталось времени</th><th style="width: 40px;"></th></tr>
                 </thead>
                 <tbody id="allowed-list">
-                    <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Загрузка...</td></tr>
+                    <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>
                 </tbody>
             </table>
         </div>
 
+        <!-- Оглавление с рейтингом -->
         <div class="nav-tabs">
             <a href="https://ro-helper.ru/perekup" class="nav-btn active" data-tab="perekup">📈 Перекуп</a>
             <a href="https://ro-helper.ru/farm" class="nav-btn" data-tab="farm">💰 Фарм</a>
             <a href="https://ro-helper.ru/casino" class="nav-btn" data-tab="casino">🎰 Казино</a>
+            <a href="https://ro-helper.ru/rating" class="nav-btn" data-tab="rating">🏆 Рейтинг</a>
         </div>
 
         <!-- Раздел Перекуп -->
@@ -1471,6 +1611,60 @@
                     </thead>
                     <tbody id="dice-history-list">
                         <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">История игр в кости пуста</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Раздел Рейтинг -->
+        <div id="tab-rating" class="tab-content">
+            <div class="card">
+                <h2>🏆 Рейтинг угонщиков (Фарм)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Игрок (Логин)</th>
+                            <th>Машин за сегодня</th>
+                            <th>Заработано за сегодня</th>
+                            <th>Всего за всё время</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rating-theft-list">
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>📈 Рейтинг перекупов</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Игрок (Логин)</th>
+                            <th>Последняя проданная вещь</th>
+                            <th>Выручка нетто</th>
+                            <th>Чистая прибыль</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rating-reseller-list">
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>🎰 Рейтинг казино (Кости)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Игрок (Логин)</th>
+                            <th>Выиграно</th>
+                            <th>Проиграно</th>
+                            <th>Итоговый баланс (Прибыль)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rating-casino-list">
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
                     </tbody>
                 </table>
             </div>
