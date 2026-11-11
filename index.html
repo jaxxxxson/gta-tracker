@@ -242,12 +242,31 @@
             document.getElementById('btn-start').addEventListener('click', startTheft);
             document.getElementById('btn-finish').addEventListener('click', finishTheft);
             document.getElementById('btn-caught').addEventListener('click', caughtByPolice);
-            document.getElementById('btn-add-allowed').addEventListener('click', addAllowedEmail);
+            document.getElementById('btn-add-allowed').addEventListener('click', addAllowedUser);
 
             updateCarList();
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
+                    if (user.email !== ADMIN_EMAIL) {
+                        // Проверяем срок подписки для обычного пользователя
+                        let docRef = doc(db, "system", "config");
+                        let docSnap = await getDoc(docRef);
+                        if (docSnap.exists()) {
+                            let allowedMap = docSnap.data().allowedUsersMap || {};
+                            let expiryDate = allowedMap[user.email];
+                            
+                            if (!expiryDate || Date.now() > expiryDate) {
+                                alert("Срок действия вашей подписки истек!");
+                                await signOut(auth);
+                                return;
+                            }
+                        } else {
+                            await signOut(auth);
+                            return;
+                        }
+                    }
+
                     currentUser = user;
                     document.getElementById('auth-section').style.display = 'none';
                     document.getElementById('app-section').style.display = 'block';
@@ -255,7 +274,7 @@
 
                     if (user.email === ADMIN_EMAIL) {
                         document.getElementById('admin-panel').style.display = 'block';
-                        await loadAllowedEmails();
+                        await loadAllowedUsers();
                     } else {
                         document.getElementById('admin-panel').style.display = 'none';
                     }
@@ -272,58 +291,72 @@
             updateClock();
         });
 
-        async function loadAllowedEmails() {
+        async function loadAllowedUsers() {
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
             let tbody = document.getElementById('allowed-list');
             if (docSnap.exists()) {
-                let emails = docSnap.data().allowedEmails || [];
+                let allowedMap = docSnap.data().allowedUsersMap || {};
+                let emails = Object.keys(allowedMap);
+                
                 if (emails.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
                 } else {
-                    tbody.innerHTML = emails.map(email => `
-                        <tr>
-                            <td>${email}</td>
-                            <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedEmail('${email}')" title="Удалить">✕</button></td>
-                        </tr>
-                    `).join('');
+                    let now = Date.now();
+                    tbody.innerHTML = emails.map(email => {
+                        let expiry = allowedMap[email];
+                        let daysLeft = Math.ceil((expiry - now) / (1000 * 60 * 60 * 24));
+                        let statusText = daysLeft > 0 ? `Действует (осталось ${daysLeft} дн.)` : `Истекла`;
+                        let statusColor = daysLeft > 0 ? `var(--success)` : `var(--danger)`;
+
+                        return `
+                            <tr>
+                                <td>${email}</td>
+                                <td style="color: ${statusColor};">${statusText}</td>
+                                <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${email}')" title="Удалить">✕</button></td>
+                            </tr>
+                        `;
+                    }).join('');
                 }
             } else {
-                tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
             }
         }
 
-        window.addAllowedEmail = async function() {
+        window.addAllowedUser = async function() {
             let emailInput = document.getElementById('new-allowed-email');
+            let daysInput = document.getElementById('new-allowed-days');
             let email = emailInput.value.trim().toLowerCase();
+            let days = parseInt(daysInput.value) || 30;
+
             if (!email) return;
 
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
-            let emails = [];
+            let allowedMap = {};
             if (docSnap.exists()) {
-                emails = docSnap.data().allowedEmails || [];
+                allowedMap = docSnap.data().allowedUsersMap || {};
             }
 
-            if (!emails.includes(email)) {
-                emails.push(email);
-                await setDoc(docRef, { allowedEmails: emails });
-                emailInput.value = '';
-                await loadAllowedEmails();
-                alert("Почта добавлена в разрешенные!");
-            } else {
-                alert("Эта почта уже есть в списке.");
-            }
+            // Вычисляем дату окончания (текущее время + дни в миллисекундах)
+            let expiryTime = Date.now() + (days * 24 * 60 * 60 * 1000);
+            allowedMap[email] = expiryTime;
+
+            await setDoc(docRef, { allowedUsersMap: allowedMap }, { merge: true });
+            emailInput.value = '';
+            daysInput.value = '30';
+            await loadAllowedUsers();
+            alert(`Доступ для ${email} выдан на ${days} дней!`);
         }
 
-        window.removeAllowedEmail = async function(email) {
+        window.removeAllowedUser = async function(email) {
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
-                let emails = docSnap.data().allowedEmails || [];
-                emails = emails.filter(e => e !== email);
-                await setDoc(docRef, { allowedEmails: emails });
-                await loadAllowedEmails();
+                let allowedMap = docSnap.data().allowedUsersMap || {};
+                delete allowedMap[email];
+                await setDoc(docRef, { allowedUsersMap: allowedMap }, { merge: true });
+                await loadAllowedUsers();
             }
         }
 
@@ -333,7 +366,6 @@
             carSelect.innerHTML = '';
             
             let cars = [...carsByLevel[level]];
-            // Сортировка машин по алфавиту
             cars.sort((a, b) => a.name.localeCompare(b.name));
 
             if (cars.length === 0) {
@@ -346,7 +378,7 @@
                 document.getElementById('btn-start').disabled = false;
                 cars.forEach((car) => {
                     let opt = document.createElement('option');
-                    opt.value = car.name; // Храним имя для надежности
+                    opt.value = car.name;
                     opt.textContent = car.name;
                     carSelect.appendChild(opt);
                 });
@@ -409,13 +441,14 @@
             try {
                 let docRef = doc(db, "system", "config");
                 let docSnap = await getDoc(docRef);
-                let allowedEmails = [];
+                let allowedMap = {};
                 if (docSnap.exists()) {
-                    allowedEmails = docSnap.data().allowedEmails || [];
+                    allowedMap = docSnap.data().allowedUsersMap || {};
                 }
 
-                if (emailInput !== ADMIN_EMAIL && !allowedEmails.includes(emailInput)) {
-                    alert("Доступ ограничен! Ваш email не найден в списке разрешенных. Обратитесь к администратору для покупки доступа.");
+                let expiryTime = allowedMap[emailInput];
+                if (emailInput !== ADMIN_EMAIL && (!expiryTime || Date.now() > expiryTime)) {
+                    alert("Доступ ограничен! Ваш email не найден в списке активных подписок или срок её действия истек.");
                     return;
                 }
 
@@ -582,7 +615,6 @@
                 if (userData.history.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>`;
                 } else {
-                    // Группируем историю по дням
                     let grouped = {};
                     userData.history.forEach((item, globalIndex) => {
                         let dayKey = item.date || 'Сегодня';
@@ -592,7 +624,6 @@
 
                     let html = '';
                     for (let day in grouped) {
-                        // Считаем итог дня по успешным угонам
                         let daySuccessful = grouped[day].filter(g => g.item.status !== 'caught');
                         let dayEarned = daySuccessful.reduce((sum, g) => sum + g.item.price, 0);
 
@@ -653,20 +684,24 @@
 
         <div id="admin-panel" class="card admin-card" style="display:none;">
             <h2>👑 Панель администратора</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Добавьте email покупателя, чтобы он мог зарегистрироваться на сайте</p>
-            <input type="email" id="new-allowed-email" placeholder="email@example.com">
-            <button id="btn-add-allowed">Разрешить доступ</button>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center;">Управление доступом и сроком подписки пользователей</p>
             
-            <h3 style="margin-top: 20px; font-size: 1rem;">Список разрешенных почт:</h3>
+            <input type="email" id="new-allowed-email" placeholder="email@example.com">
+            <label for="new-allowed-days" style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок подписки (в днях):</label>
+            <input type="number" id="new-allowed-days" value="30" min="1">
+            <button id="btn-add-allowed">Выдать / продлить доступ</button>
+            
+            <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки пользователей:</h3>
             <table>
                 <thead>
                     <tr>
                         <th>Email</th>
+                        <th>Статус / Срок</th>
                         <th style="width: 40px;"></th>
                     </tr>
                 </thead>
                 <tbody id="allowed-list">
-                    <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">Загрузка...</td></tr>
+                    <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Загрузка...</td></tr>
                 </tbody>
             </table>
         </div>
