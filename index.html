@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Трекер угона авто (GTA RP)</title>
+    <title>Помощник GTA RP (Фарм & Угонщик)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -31,6 +31,38 @@
         h1, h2 {
             text-align: center;
         }
+        /* Навигация / Оглавление */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .nav-btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--card-bg);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            margin: 0;
+        }
+        .nav-btn.active {
+            background: var(--accent);
+            color: var(--text-color);
+            border-color: var(--accent);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
         .clock-box {
             background: var(--card-bg);
             border: 1px solid var(--border);
@@ -192,13 +224,12 @@
             measurementId: "G-ZM1R53R9MH"
         };
 
-        const ADMIN_LOGIN = "admin"; // Ваш логин администратора
+        const ADMIN_LOGIN = "admin";
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        // Функция для преобразования логина во внутренний фиктивный email для Firebase Auth
         function loginToEmail(login) {
             return login.trim().toLowerCase() + "@gta-tracker.local";
         }
@@ -209,7 +240,18 @@
             3: [],
             4: [],
             5: [],
-            6: [],
+            6: [
+                { name: "Alexis LX 570", day: 45000, night: 22500 },
+                { name: "Wulfsborg Teguan AD", day: 20700, night: 10350 },
+                { name: "Blau & Weiss M3 E46", day: 21600, night: 10800 },
+                { name: "Emmett DMC-12", day: 43200, night: 21600 },
+                { name: "Blau & Weiss X5 M E70", day: 31500, night: 15750 },
+                { name: "Hebei F7", day: 10800, night: 5400 },
+                { name: "Yataro Lance Revolution IX", day: 31500, night: 15750 },
+                { name: "Yataro Sunrise D30", day: 10000, night: 5000 },
+                { name: "Cornelian Corwette C7", day: 45000, night: 22500 },
+                { name: "Daimler G-Class W463", day: 53250, night: 26625 }
+            ],
             7: [
                 { name: "Daimler-AMX SL R232", day: 18900, night: 9450 },
                 { name: "Ferruccio Siun", day: 65625, night: 46875 },
@@ -233,6 +275,18 @@
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
+            // Переключение вкладок (оглавление)
+            const tabBtns = document.querySelectorAll('.nav-btn');
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    tabBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    let tabName = btn.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                    document.getElementById('tab-' + tabName).classList.add('active');
+                });
+            });
+
             const levelSelect = document.getElementById('level-select');
             for (let i = 1; i <= 7; i++) {
                 let opt = document.createElement('option');
@@ -257,7 +311,6 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    // Восстанавливаем логин из email
                     currentLogin = user.email.split('@')[0];
 
                     if (currentLogin !== ADMIN_LOGIN) {
@@ -736,7 +789,7 @@
 <body>
 
 <div class="container">
-    <h1>Трекер угона авто (GTA RP)</h1>
+    <h1>Помощник GTA RP</h1>
 
     <div id="auth-section" class="card auth-container">
         <h2>Вход / Регистрация</h2>
@@ -777,62 +830,80 @@
             </table>
         </div>
 
-        <div class="clock-box">
-            Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
-            Status: <span id="time-status" style="font-weight: bold;">--</span>
+        <!-- Оглавление (Выбор разделов) -->
+        <div class="nav-tabs">
+            <button class="nav-btn active" data-tab="farm">💰 Фарм</button>
+            <button class="nav-btn" data-tab="theft">🚗 Угонщик</button>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div>Угонов за сегодня</div>
-                <div id="today-count" class="stat-value">0</div>
-            </div>
-            <div class="stat-card">
-                <div>Заработано за сегодня</div>
-                <div id="today-earned" class="stat-value">0 ₽</div>
+        <!-- Раздел: Фарм -->
+        <div id="tab-farm" class="tab-content active">
+            <div class="card">
+                <h2>Раздел фармящих механик</h2>
+                <p style="text-align: center; color: var(--text-muted);">Здесь в будущем будут размещены инструменты и калькуляторы для фарма.</p>
             </div>
         </div>
 
-        <div class="card" id="active-panel" style="display:none;">
-            <h2>Активный угон</h2>
-            <p>Автомобиль: <strong id="active-car-name"></strong></p>
-            <p>Прошло времени:</p>
-            <div id="active-timer" class="timer-display">00:00</div>
-            <div class="button-group">
-                <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
-                <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
+        <!-- Раздел: Угонщик (Трекер) -->
+        <div id="tab-theft" class="tab-content">
+            <div class="clock-box">
+                Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
+                Status: <span id="time-status" style="font-weight: bold;">--</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div>Угонов за сегодня</div>
+                    <div id="today-count" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div>Заработано за сегодня</div>
+                    <div id="today-earned" class="stat-value">0 ₽</div>
+                </div>
+            </div>
+
+            <div class="card" id="active-panel" style="display:none;">
+                <h2>Активный угон</h2>
+                <p>Автомобиль: <strong id="active-car-name"></strong></p>
+                <p>Прошло времени:</p>
+                <div id="active-timer" class="timer-display">00:00</div>
+                <div class="button-group">
+                    <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
+                    <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
+                </div>
+            </div>
+
+            <div class="card" id="start-panel">
+                <h2>Начать новый угон</h2>
+                <label for="level-select">Выберите уровень:</label>
+                <select id="level-select"></select>
+
+                <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
+                <select id="car-select"></select>
+
+                <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
+                <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
+            </div>
+
+            <div class="card">
+                <h2>История угонов</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Автомобиль</th>
+                            <th>Время</th>
+                            <th>Затрачено</th>
+                            <th>Результат / Цена</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-list">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
-        <div class="card" id="start-panel">
-            <h2>Начать новый угон</h2>
-            <label for="level-select">Выберите уровень:</label>
-            <select id="level-select"></select>
-
-            <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
-            <select id="car-select"></select>
-
-            <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
-            <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
-        </div>
-
-        <div class="card">
-            <h2>История угонов</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Автомобиль</th>
-                        <th>Время</th>
-                        <th>Затрачено</th>
-                        <th>Результат / Цена</th>
-                        <th style="width: 40px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="history-list">
-                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
-                </tbody>
-            </table>
-        </div>
     </div>
 </div>
 
