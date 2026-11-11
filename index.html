@@ -416,7 +416,6 @@
                 });
             });
 
-            // Переключение подразделов внутри Фарма (Угонщик / Закладчик)
             const farmSubs = document.querySelectorAll('.farm-sub');
             farmSubs.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -651,7 +650,7 @@
                 `).join('');
             }
 
-            // 1.1 Закладчик
+            // 2. Закладчики
             let courierArray = Object.keys(courierStats).map(login => ({ login, ...courierStats[login] }));
             courierArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
@@ -669,7 +668,7 @@
                 `).join('');
             }
 
-            // 2. Перекупы
+            // 3. Перекупы
             let resellerArray = Object.keys(resellerStats).map(login => ({ login, ...resellerStats[login] }));
             resellerArray.sort((a, b) => b.totalProfit - a.totalProfit);
 
@@ -690,7 +689,7 @@
                 }).join('');
             }
 
-            // 3. Казино
+            // 4. Казино
             let casinoArray = Object.keys(casinoStats).map(login => ({ login, ...casinoStats[login] }));
             casinoArray.sort((a, b) => b.net - a.net);
 
@@ -968,7 +967,6 @@
             await setDoc(docRef, userData, { merge: true });
         }
 
-        // Логика Закладчика
         async function addCourierRecord() {
             let count = parseInt(document.getElementById('courier-count').value) || 0;
             let pricePerOne = parseFloat(document.getElementById('courier-price').value) || 0;
