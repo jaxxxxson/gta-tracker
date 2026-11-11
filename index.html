@@ -51,7 +51,7 @@
             margin-bottom: 20px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-        select, button {
+        input, select, button {
             width: 100%;
             padding: 12px;
             border-radius: 8px;
@@ -61,8 +61,9 @@
             font-size: 1rem;
             margin-top: 10px;
             outline: none;
+            box-sizing: border-box;
         }
-        select:focus {
+        input:focus, select:focus {
             border-color: var(--accent);
         }
         button {
@@ -80,6 +81,12 @@
         }
         button.danger:hover {
             background: #dc2626;
+        }
+        button.secondary {
+            background: #475569;
+        }
+        button.secondary:hover {
+            background: #334155;
         }
         table {
             width: 100%;
@@ -120,223 +127,321 @@
             margin: 10px 0;
             font-weight: bold;
         }
+        .auth-container {
+            max-width: 400px;
+            margin: 50px auto;
+        }
+        .user-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
     </style>
+
+    <!-- Подключаем Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Ваши точные ключи конфигурации Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyAT03HslnNWesJcagAB-dFfITaQTrz8qw8",
+            authDomain: "gta-tracker-67613.firebaseapp.com",
+            projectId: "gta-tracker-67613",
+            storageBucket: "gta-tracker-67613.firebasestorage.app",
+            messagingSenderId: "308885042454",
+            appId: "1:308885042454:web:8ebafeac604e7e75b8cc37",
+            measurementId: "G-ZM1R53R9MH"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const cars = [
+            { name: "Daimler-AMX SL R232", day: 18900, night: 9450 },
+            { name: "Ferruccio Siun", day: 65625, night: 46875 },
+            { name: "Molsheim Formula", day: 65625, night: 46875 },
+            { name: "Wayn GT", day: 65625, night: 46875 },
+            { name: "Wurttem 918 Spyder", day: 65625, night: 46875 },
+            { name: "Ferruccio Verano", day: 65625, night: 46875 },
+            { name: "Molsheim Vivo", day: 65625, night: 46875 },
+            { name: "Leslie Ayrton", day: 65625, night: 46875 },
+            { name: "Molsheim Shiron", day: 65625, night: 46875 },
+            { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
+            { name: "Maranello FXX-K", day: 65625, night: 46875 }
+        ];
+
+        let currentUser = null;
+        let userData = { history: [], activeTheft: null };
+        let timerInterval = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const selectEl = document.getElementById('car-select');
+            cars.forEach((car, index) => {
+                let opt = document.createElement('option');
+                opt.value = index;
+                opt.textContent = car.name;
+                selectEl.appendChild(opt);
+            });
+            selectEl.addEventListener('change', updateCarInfo);
+
+            document.getElementById('btn-login').addEventListener('click', login);
+            document.getElementById('btn-register').addEventListener('click', register);
+            document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
+            document.getElementById('btn-start').addEventListener('click', startTheft);
+            document.getElementById('btn-finish').addEventListener('click', finishTheft);
+
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById('auth-section').style.display = 'none';
+                    document.getElementById('app-section').style.display = 'block';
+                    document.getElementById('user-email').textContent = user.email;
+                    await loadUserData();
+                } else {
+                    currentUser = null;
+                    document.getElementById('auth-section').style.display = 'block';
+                    document.getElementById('app-section').style.display = 'none';
+                }
+            });
+
+            setInterval(updateClock, 1000);
+            updateClock();
+        });
+
+        function isNightTime(date) {
+            let hours = date.getHours();
+            let minutes = date.getMinutes();
+            let totalMins = hours * 60 + minutes;
+            return totalMins >= 60 && totalMins < 540; // 01:00 - 09:00 МСК
+        }
+
+        function updateClock() {
+            let now = new Date();
+            let mskString = now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+            document.getElementById('msk-time').textContent = mskString;
+            
+            let night = isNightTime(now);
+            let statusEl = document.getElementById('time-status');
+            if (night) {
+                statusEl.textContent = "🌙 Ночь (пониженная цена)";
+                statusEl.style.color = "#3b82f6";
+            } else {
+                statusEl.textContent = "☀️ День (обычная цена)";
+                statusEl.style.color = "#22c55e";
+            }
+            updateCarInfo();
+        }
+
+        function updateCarInfo() {
+            let idx = document.getElementById('car-select').value;
+            let car = cars[idx];
+            let night = isNightTime(new Date());
+            let currentPrice = night ? car.night : car.day;
+            document.getElementById('selected-car-info').innerHTML = 
+                `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${currentPrice.toLocaleString()} ₽</strong>`;
+        }
+
+        async function register() {
+            let email = document.getElementById('auth-email').value;
+            let pass = document.getElementById('auth-pass').value;
+            try {
+                await createUserWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                alert("Ошибка регистрации: " + err.message);
+            }
+        }
+
+        async function login() {
+            let email = document.getElementById('auth-email').value;
+            let pass = document.getElementById('auth-pass').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                alert("Ошибка входа: " + err.message);
+            }
+        }
+
+        async function loadUserData() {
+            let docRef = doc(db, "users", currentUser.uid);
+            let docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                userData = docSnap.data();
+            } else {
+                userData = { history: [], activeTheft: null };
+                await setDoc(docRef, userData);
+            }
+            renderState();
+        }
+
+        async function saveUserData() {
+            let docRef = doc(db, "users", currentUser.uid);
+            await setDoc(docRef, userData);
+        }
+
+        async function startTheft() {
+            let idx = document.getElementById('car-select').value;
+            userData.activeTheft = {
+                carIndex: idx,
+                startTime: Date.now()
+            };
+            await saveUserData();
+            renderState();
+        }
+
+        async function finishTheft() {
+            if (!userData.activeTheft) return;
+            let elapsedSec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
+            let mins = Math.floor(elapsedSec / 60);
+            let secs = elapsedSec % 60;
+            let durationStr = `${mins} мин ${secs} сек`;
+
+            let now = new Date();
+            let night = isNightTime(now);
+            let car = cars[userData.activeTheft.carIndex];
+            let price = night ? car.night : car.day;
+
+            let record = {
+                name: car.name,
+                time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+                duration: durationStr,
+                price: price,
+                date: now.toDateString()
+            };
+
+            userData.history.unshift(record);
+            userData.activeTheft = null;
+            await saveUserData();
+            renderState();
+        }
+
+        function updateActiveTimer() {
+            if (!userData.activeTheft) return;
+            let elapsedSec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
+            let mins = Math.floor(elapsedSec / 60);
+            let secs = elapsedSec % 60;
+            document.getElementById('active-timer').textContent = 
+                String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+        }
+
+        function renderState() {
+            if (userData.activeTheft) {
+                document.getElementById('active-panel').style.display = 'block';
+                document.getElementById('start-panel').style.display = 'none';
+                document.getElementById('active-car-name').textContent = cars[userData.activeTheft.carIndex].name;
+                
+                if (!timerInterval) {
+                    timerInterval = setInterval(updateActiveTimer, 1000);
+                }
+                updateActiveTimer();
+            } else {
+                document.getElementById('active-panel').style.display = 'none';
+                document.getElementById('start-panel').style.display = 'block';
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+            }
+
+            let todayStr = new Date().toDateString();
+            let todayHistory = userData.history.filter(h => h.date === todayStr);
+
+            document.getElementById('today-count').textContent = todayHistory.length;
+            let totalEarned = todayHistory.reduce((sum, item) => sum + item.price, 0);
+            document.getElementById('today-earned').textContent = totalEarned.toLocaleString() + ' ₽';
+
+            let tbody = document.getElementById('history-list');
+            if (todayHistory.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
+            } else {
+                tbody.innerHTML = todayHistory.map(item => `
+                    <tr>
+                        <td>${item.name}</td>
+                        <td>${item.time}</td>
+                        <td>${item.duration}</td>
+                        <td>${item.price.toLocaleString()} ₽</td>
+                    </tr>
+                `).join('');
+            }
+        }
+    </script>
 </head>
 <body>
 
 <div class="container">
     <h1>Трекер угона авто (GTA RP)</h1>
-    
-    <div class="clock-box">
-        Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
-        Статус: <span id="time-status" style="font-weight: bold;">--</span>
+
+    <div id="auth-section" class="card auth-container" style="display:none;">
+        <h2>Вход / Регистрация</h2>
+        <input type="email" id="auth-email" placeholder="Email">
+        <input type="password" id="auth-pass" placeholder="Пароль">
+        <button id="btn-login">Войти</button>
+        <button id="btn-register" class="secondary">Зарегистрироваться</button>
     </div>
 
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div>Угонов за сегодня</div>
-            <div id="today-count" class="stat-value">0</div>
+    <div id="app-section" style="display:none;">
+        <div class="user-bar">
+            <span>Вы вошли как: <strong id="user-email"></strong></span>
+            <button id="btn-logout" class="danger" style="width: auto; padding: 6px 12px; margin: 0;">Выйти</button>
         </div>
-        <div class="stat-card">
-            <div>Заработано за сегодня</div>
-            <div id="today-earned" class="stat-value">0 ₽</div>
+
+        <div class="clock-box">
+            Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
+            Статус: <span id="time-status" style="font-weight: bold;">--</span>
         </div>
-    </div>
 
-    <div class="card" id="active-panel" style="display:none;">
-        <h2>Активный угон</h2>
-        <p>Автомобиль: <strong id="active-car-name"></strong></p>
-        <p>Прошло времени:</p>
-        <div id="active-timer" class="timer-display">00:00</div>
-        <button class="danger" onclick="finishTheft()">Закончить сдачу</button>
-    </div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div>Угонов за сегодня</div>
+                <div id="today-count" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <div>Заработано за сегодня</div>
+                <div id="today-earned" class="stat-value">0 ₽</div>
+            </div>
+        </div>
 
-    <div class="card" id="start-panel">
-        <h2>Начать новый угон</h2>
-        <label for="car-select">Выберите автомобиль (7 уровень):</label>
-        <select id="car-select"></select>
-        <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
-        <button onclick="startTheft()">Начать поиск / угон</button>
-    </div>
+        <div class="card" id="active-panel" style="display:none;">
+            <h2>Активный угон</h2>
+            <p>Автомобиль: <strong id="active-car-name"></strong></p>
+            <p>Прошло времени:</p>
+            <div id="active-timer" class="timer-display">00:00</div>
+            <button id="btn-finish" class="danger">Закончить сдачу</button>
+        </div>
 
-    <div class="card">
-        <h2>История сданных авто за сегодня</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Автомобиль</th>
-                    <th>Время сдачи</th>
-                    <th>Затрачено</th>
-                    <th>Цена</th>
-                </tr>
-            </thead>
-            <tbody id="history-list">
-                <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
-            </tbody>
-        </table>
+        <div class="card" id="start-panel">
+            <h2>Начать новый угон</h2>
+            <label for="car-select">Выберите автомобиль (7 уровень):</label>
+            <select id="car-select"></select>
+            <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
+            <button id="btn-start">Начать поиск / угон</button>
+        </div>
+
+        <div class="card">
+            <h2>История сданных авто за сегодня</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Автомобиль</th>
+                        <th>Время сдачи</th>
+                        <th>Затрачено</th>
+                        <th>Цена</th>
+                    </tr>
+                </thead>
+                <tbody id="history-list">
+                    <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
-
-<script>
-    const cars = [
-        { name: "Daimler-AMX SL R232", day: 18900, night: 9450 },
-        { name: "Ferruccio Siun", day: 65625, night: 46875 },
-        { name: "Molsheim Formula", day: 65625, night: 46875 },
-        { name: "Wayn GT", day: 65625, night: 46875 },
-        { name: "Wurttem 918 Spyder", day: 65625, night: 46875 },
-        { name: "Ferruccio Verano", day: 65625, night: 46875 },
-        { name: "Molsheim Vivo", day: 65625, night: 46875 },
-        { name: "Leslie Ayrton", day: 65625, night: 46875 },
-        { name: "Molsheim Shiron", day: 65625, night: 46875 },
-        { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
-        { name: "Maranello FXX-K", day: 65625, night: 46875 }
-    ];
-
-    let activeTheft = JSON.parse(localStorage.getItem('activeTheft')) || null;
-    let history = JSON.parse(localStorage.getItem('theftHistory')) || [];
-    let timerInterval = null;
-
-    const selectEl = document.getElementById('car-select');
-    cars.forEach((car, index) => {
-        let opt = document.createElement('option');
-        opt.value = index;
-        opt.textContent = car.name;
-        selectEl.appendChild(opt);
-    });
-
-    selectEl.addEventListener('change', updateCarInfo);
-
-    function isNightTime(date) {
-        let hours = date.getHours();
-        let minutes = date.getMinutes();
-        let totalMins = hours * 60 + minutes;
-        return totalMins >= 60 && totalMins < 540; // 01:00 - 09:00 МСК
-    }
-
-    function updateClock() {
-        let now = new Date();
-        let mskOptions = { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
-        let mskString = now.toLocaleTimeString('ru-RU', mskOptions);
-        
-        document.getElementById('msk-time').textContent = mskString;
-        
-        let night = isNightTime(now);
-        let statusEl = document.getElementById('time-status');
-        if (night) {
-            statusEl.textContent = "🌙 Ночь (пониженная цена)";
-            statusEl.style.color = "#3b82f6";
-        } else {
-            statusEl.textContent = "☀️ День (обычная цена)";
-            statusEl.style.color = "#22c55e";
-        }
-        updateCarInfo();
-    }
-
-    function updateCarInfo() {
-        let idx = selectEl.value;
-        let car = cars[idx];
-        let now = new Date();
-        let night = isNightTime(now);
-        let currentPrice = night ? car.night : car.day;
-        
-        document.getElementById('selected-car-info').innerHTML = 
-            `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${currentPrice.toLocaleString()} ₽</strong>`;
-    }
-
-    function startTheft() {
-        let idx = selectEl.value;
-        activeTheft = {
-            carIndex: idx,
-            startTime: Date.now()
-        };
-        localStorage.setItem('activeTheft', JSON.stringify(activeTheft));
-        renderState();
-    }
-
-    function finishTheft() {
-        if (!activeTheft) return;
-        let nowTime = Date.now();
-        let elapsedMs = nowTime - activeTheft.startTime;
-        let elapsedSec = Math.floor(elapsedMs / 1000);
-        let mins = Math.floor(elapsedSec / 60);
-        let secs = elapsedSec % 60;
-        let durationStr = `${mins} мин ${secs} сек`;
-
-        let now = new Date();
-        let night = isNightTime(now);
-        let car = cars[activeTheft.carIndex];
-        let price = night ? car.night : car.day;
-
-        let record = {
-            name: car.name,
-            time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
-            duration: durationStr,
-            price: price,
-            date: now.toDateString()
-        };
-
-        history.unshift(record);
-        localStorage.setItem('theftHistory', JSON.stringify(history));
-
-        activeTheft = null;
-        localStorage.removeItem('activeTheft');
-        renderState();
-    }
-
-    function updateActiveTimer() {
-        if (!activeTheft) return;
-        let elapsedSec = Math.floor((Date.now() - activeTheft.startTime) / 1000);
-        let mins = Math.floor(elapsedSec / 60);
-        let secs = elapsedSec % 60;
-        document.getElementById('active-timer').textContent = 
-            String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
-    }
-
-    function renderState() {
-        if (activeTheft) {
-            document.getElementById('active-panel').style.display = 'block';
-            document.getElementById('start-panel').style.display = 'none';
-            document.getElementById('active-car-name').textContent = cars[activeTheft.carIndex].name;
-            
-            if (!timerInterval) {
-                timerInterval = setInterval(updateActiveTimer, 1000);
-            }
-            updateActiveTimer();
-        } else {
-            document.getElementById('active-panel').style.display = 'none';
-            document.getElementById('start-panel').style.display = 'block';
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-        }
-
-        let todayStr = new Date().toDateString();
-        let todayHistory = history.filter(h => h.date === todayStr);
-
-        document.getElementById('today-count').textContent = todayHistory.length;
-        let totalEarned = todayHistory.reduce((sum, item) => sum + item.price, 0);
-        document.getElementById('today-earned').textContent = totalEarned.toLocaleString() + ' ₽';
-
-        let tbody = document.getElementById('history-list');
-        if (todayHistory.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
-        } else {
-            tbody.innerHTML = todayHistory.map(item => `
-                <tr>
-                    <td>${item.name}</td>
-                    <td>${item.time}</td>
-                    <td>${item.duration}</td>
-                    <td>${item.price.toLocaleString()} ₽</td>
-                </tr>
-            `).join('');
-        }
-    }
-
-    setInterval(updateClock, 1000);
-    updateClock();
-    renderState();
-</script>
 
 </body>
 </html>
