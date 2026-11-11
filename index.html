@@ -149,6 +149,21 @@
         .caught-row {
             color: var(--danger);
         }
+        .delete-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0;
+            width: auto;
+            margin: 0;
+            transition: color 0.2s;
+        }
+        .delete-btn:hover {
+            color: var(--danger);
+            background: transparent;
+        }
     </style>
 
     <script type="module">
@@ -412,6 +427,12 @@
             renderState();
         }
 
+        window.deleteHistoryItem = async function(index) {
+            userData.history.splice(index, 1);
+            await saveUserData();
+            renderState();
+        }
+
         function updateActiveTimer() {
             if (!userData.activeTheft) return;
             let elapsedSec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
@@ -466,9 +487,12 @@
             let tbody = document.getElementById('history-list');
             if (tbody) {
                 if (todayHistory.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
                 } else {
-                    tbody.innerHTML = todayHistory.map(item => {
+                    tbody.innerHTML = todayHistory.map((item, originalIndex) => {
+                        let globalIndex = userData.history.indexOf(item);
+                        let deleteBtn = `<button class="delete-btn" onclick="deleteHistoryItem(${globalIndex})" title="Удалить запись">✕</button>`;
+                        
                         if (item.status === 'caught') {
                             return `
                                 <tr class="caught-row">
@@ -476,6 +500,7 @@
                                     <td>${item.time}</td>
                                     <td>${item.duration}</td>
                                     <td>Поймали менты (0 ₽)</td>
+                                    <td style="text-align: right;">${deleteBtn}</td>
                                 </tr>
                             `;
                         } else {
@@ -485,6 +510,7 @@
                                     <td>${item.time}</td>
                                     <td>${item.duration}</td>
                                     <td>${item.price.toLocaleString()} ₽</td>
+                                    <td style="text-align: right;">${deleteBtn}</td>
                                 </tr>
                             `;
                         }
@@ -561,10 +587,11 @@
                         <th>Время</th>
                         <th>Затрачено</th>
                         <th>Результат / Цена</th>
+                        <th style="width: 40px;"></th>
                     </tr>
                 </thead>
                 <tbody id="history-list">
-                    <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>
+                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>
                 </tbody>
             </table>
         </div>
