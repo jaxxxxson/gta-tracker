@@ -527,7 +527,6 @@
 
                 usersSnapshot.forEach(docSnap => {
                     let uData = docSnap.data();
-                    uData._docId = docSnap.id;
                     allUsersData.push(uData);
                 });
 
@@ -545,8 +544,9 @@
             let casinoStats = {};
 
             usersList.forEach(u => {
-                // Берем логин из документа, либо используем часть ID документа, если поле логина еще не записано
-                let login = u.login || `Игрок_${u._docId.substring(0, 5)}`;
+                let login = u.login;
+                // Строгая проверка: если у пользователя нет реального логина (или это заглушка), пропускаем его
+                if (!login || login.startsWith("Игрок_") || login === "Игрок" || login === "Неизвестный") return;
 
                 // Угонщик
                 if (u.history) {
