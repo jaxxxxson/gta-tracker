@@ -138,6 +138,12 @@
             from { opacity: 0; transform: translateY(6px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        .farm-content {
+            display: none;
+        }
+        .farm-content.active {
+            display: block;
+        }
         .section-block {
             scroll-margin-top: 25px;
             margin-bottom: 35px;
@@ -372,8 +378,7 @@
                 { name: "Leslie Ayrton", day: 65625, night: 46875 },
                 { name: "Molsheim Shiron", day: 65625, night: 46875 },
                 { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
-                { name: "Maranello FXX-K", day: 65625, night: 46875 },
-                { name: "Leslie Alex", day: 65625, night: 46875 }
+                { name: "Maranello FXX-K", day: 65625, night: 46875 }
             ]
         };
 
@@ -411,16 +416,15 @@
                 });
             });
 
-            // Подразделы во вкладке Фарм
-            const farmSubBtns = document.querySelectorAll('#tab-farm .sub-btn');
-            farmSubBtns.forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    farmSubBtns.forEach(b => b.classList.remove('active'));
+            // Переключение подразделов внутри Фарма (Угонщик / Закладчик)
+            const farmSubs = document.querySelectorAll('.farm-sub');
+            farmSubs.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    farmSubs.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    let targetSub = btn.getAttribute('data-sub');
-                    document.querySelectorAll('.farm-sub-content').forEach(sc => sc.style.display = 'none');
-                    document.getElementById('farm-sub-' + targetSub).style.display = 'block';
+                    let subName = btn.getAttribute('data-farm-sub');
+                    document.querySelectorAll('.farm-content').forEach(fc => fc.classList.remove('active'));
+                    document.getElementById('farm-sub-' + subName).classList.add('active');
                 });
             });
 
@@ -562,7 +566,7 @@
                 let login = u.login;
                 if (!login || login.startsWith("Игрок_") || login === "Игрок" || login === "Неизвестный") return;
 
-                // 1. Угон авто
+                // Угонщик
                 if (u.history) {
                     u.history.forEach(h => {
                         if (h.status !== 'caught') {
@@ -580,12 +584,12 @@
                     });
                 }
 
-                // 2. Закладчики
+                // Закладчик
                 if (u.courierHistory) {
                     u.courierHistory.forEach(c => {
                         let day = c.date || todayStr;
                         if (!courierStats[login]) courierStats[login] = { todayCount: 0, todayEarned: 0, totalCount: 0, totalEarned: 0 };
-                        
+
                         courierStats[login].totalCount += c.count;
                         courierStats[login].totalEarned += c.earned;
 
@@ -629,7 +633,7 @@
                 }
             });
 
-            // 1. Рейтинг угонщиков (Авто)
+            // 1. Угонщики
             let theftArray = Object.keys(theftStats).map(login => ({ login, ...theftStats[login] }));
             theftArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
@@ -647,7 +651,7 @@
                 `).join('');
             }
 
-            // 2. Рейтинг закладчиков
+            // 1.1 Закладчик
             let courierArray = Object.keys(courierStats).map(login => ({ login, ...courierStats[login] }));
             courierArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
@@ -665,7 +669,7 @@
                 `).join('');
             }
 
-            // 3. Перекупы
+            // 2. Перекупы
             let resellerArray = Object.keys(resellerStats).map(login => ({ login, ...resellerStats[login] }));
             resellerArray.sort((a, b) => b.totalProfit - a.totalProfit);
 
@@ -686,7 +690,7 @@
                 }).join('');
             }
 
-            // 4. Казино
+            // 3. Казино
             let casinoArray = Object.keys(casinoStats).map(login => ({ login, ...casinoStats[login] }));
             casinoArray.sort((a, b) => b.net - a.net);
 
@@ -964,22 +968,22 @@
             await setDoc(docRef, userData, { merge: true });
         }
 
+        // Логика Закладчика
         async function addCourierRecord() {
-            let pricePerOne = parseFloat(document.getElementById('courier-price').value) || 0;
             let count = parseInt(document.getElementById('courier-count').value) || 0;
+            let pricePerOne = parseFloat(document.getElementById('courier-price').value) || 0;
 
-            if (pricePerOne <= 0 || count <= 0) {
-                alert("Введите корректную цену за 1 закладку и количество!");
+            if (count <= 0 || pricePerOne <= 0) {
+                alert("Введите корректное количество и стоимость за 1 закладку!");
                 return;
             }
 
-            let earned = pricePerOne * count;
+            let earned = count * pricePerOne;
             let now = new Date();
-
             let record = {
                 id: Date.now(),
-                pricePerOne: pricePerOne,
                 count: count,
+                pricePerOne: pricePerOne,
                 earned: earned,
                 time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                 date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
@@ -991,7 +995,7 @@
             document.getElementById('courier-count').value = "";
             renderState();
             loadGlobalRatings();
-            alert(`Успешно записано! Заработано: ${earned.toLocaleString()} ₽`);
+            alert(`Успешно добавлено! Заработано: ${earned.toLocaleString()} ₽`);
         }
 
         window.deleteCourierItem = async function(id) {
@@ -1229,22 +1233,16 @@
             }
 
             let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
-            
             let todayHistory = userData.history.filter(h => h.date === todayStr);
-            let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
-            let theftEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
-
-            let todayCourier = (userData.courierHistory || []).filter(c => c.date === todayStr);
-            let courierEarned = todayCourier.reduce((sum, c) => sum + c.earned, 0);
-            let courierCount = todayCourier.reduce((sum, c) => sum + c.count, 0);
-
-            let totalTodayCount = successfulThefts.length + courierCount;
-            let totalTodayEarned = theftEarned + courierEarned;
 
             let todayCountEl = document.getElementById('today-count');
             let todayEarnedEl = document.getElementById('today-earned');
-            if (todayCountEl) todayCountEl.textContent = totalTodayCount;
-            if (todayEarnedEl) todayEarnedEl.textContent = totalTodayEarned.toLocaleString() + ' ₽';
+
+            let successfulThefts = todayHistory.filter(h => h.status !== 'caught');
+            if (todayCountEl) todayCountEl.textContent = successfulThefts.length;
+            
+            let totalEarned = successfulThefts.reduce((sum, item) => sum + item.price, 0);
+            if (todayEarnedEl) todayEarnedEl.textContent = totalEarned.toLocaleString() + ' ₽';
 
             let tbody = document.getElementById('history-list');
             if (tbody) {
@@ -1297,29 +1295,12 @@
                 }
             }
 
-            let courierTbody = document.getElementById('courier-history-list');
-            let courierList = userData.courierHistory || [];
-            if (courierTbody) {
-                if (courierList.length === 0) {
-                    courierTbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей о закладках</td></tr>`;
-                } else {
-                    courierTbody.innerHTML = courierList.map(item => `
-                        <tr>
-                            <td>${item.date} ${item.time}</td>
-                            <td>${item.pricePerOne.toLocaleString()} ₽</td>
-                            <td>${item.count} шт.</td>
-                            <td style="color: var(--success); font-weight: bold;">+${item.earned.toLocaleString()} ₽</td>
-                            <td style="text-align: right;"><button class="delete-btn" onclick="deleteCourierItem(${item.id})">✕</button></td>
-                        </tr>
-                    `).join('');
-                }
-            }
-
             renderResellerCabinet();
             renderResellerProperty();
             renderResellerLedger();
             renderResellerAnalytics();
             renderDiceState();
+            renderCourierState();
         }
 
         function renderResellerCabinet() {
@@ -1447,6 +1428,33 @@
                         </tr>
                     `;
                 }).join('');
+            }
+        }
+
+        function renderCourierState() {
+            let courierList = userData.courierHistory || [];
+            let todayStr = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+            let todayList = courierList.filter(c => c.date === todayStr);
+
+            let todayCount = todayList.reduce((sum, c) => sum + c.count, 0);
+            let todayEarned = todayList.reduce((sum, c) => sum + c.earned, 0);
+
+            document.getElementById('courier-today-count').textContent = todayCount;
+            document.getElementById('courier-today-earned').textContent = todayEarned.toLocaleString() + ' ₽';
+
+            let tbody = document.getElementById('courier-history-list');
+            if (courierList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">История закладок пуста</td></tr>`;
+            } else {
+                tbody.innerHTML = courierList.map(item => `
+                    <tr>
+                        <td>${item.date} ${item.time}</td>
+                        <td>${item.count} шт.</td>
+                        <td>${item.pricePerOne.toLocaleString()} ₽</td>
+                        <td style="color: var(--success); font-weight: bold;">${item.earned.toLocaleString()} ₽</td>
+                        <td style="text-align: right;"><button class="delete-btn" onclick="deleteCourierItem(${item.id})">✕</button></td>
+                    </tr>
+                `).join('');
             }
         }
     </script>
@@ -1607,12 +1615,12 @@
         <!-- Раздел Фарм -->
         <div id="tab-farm" class="tab-content">
             <div class="sub-tabs">
-                <a href="#" class="sub-btn active" data-sub="theft">🚗 Угонщик</a>
-                <a href="#" class="sub-btn" data-sub="courier">📦 Закладчик</a>
+                <button class="sub-btn farm-sub active" data-farm-sub="theft">🚗 Угонщик</button>
+                <button class="sub-btn farm-sub" data-farm-sub="courier">📦 Закладчик</button>
             </div>
 
             <!-- Подраздел: Угонщик -->
-            <div id="farm-sub-theft" class="farm-sub-content">
+            <div id="farm-sub-theft" class="farm-content active">
                 <div class="clock-box">
                     Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
                     Status: <span id="time-status" style="font-weight: bold;">--</span>
@@ -1620,7 +1628,7 @@
 
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div>Фарма за сегодня (Всего)</div>
+                        <div>Угонов за сегодня</div>
                         <div id="today-count" class="stat-value">0</div>
                     </div>
                     <div class="stat-card">
@@ -1672,16 +1680,27 @@
             </div>
 
             <!-- Подраздел: Закладчик -->
-            <div id="farm-sub-courier" class="farm-sub-content" style="display: none;">
+            <div id="farm-sub-courier" class="farm-content">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div>Закладок за сегодня</div>
+                        <div id="courier-today-count" class="stat-value">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div>Заработано за сегодня</div>
+                        <div id="courier-today-earned" class="stat-value">0 ₽</div>
+                    </div>
+                </div>
+
                 <div class="card">
-                    <h2>📦 Учет закладок</h2>
-                    <label for="courier-price">Оплата за 1 закладку (₽):</label>
-                    <input type="number" id="courier-price" placeholder="1000">
+                    <h2>📦 Добавить развоз закладок</h2>
+                    <label for="courier-count">Количество развезённых закладок:</label>
+                    <input type="number" id="courier-count" placeholder="Например, 15">
 
-                    <label for="courier-count" style="margin-top: 15px; display: block;">Количество развезённых закладок:</label>
-                    <input type="number" id="courier-count" placeholder="20">
+                    <label for="courier-price" style="margin-top: 15px; display: block;">Оплата за 1 закладку (₽):</label>
+                    <input type="number" id="courier-price" placeholder="Например, 12000">
 
-                    <button id="btn-add-courier" style="margin-top: 20px;">Рассчитать и записать в доход</button>
+                    <button id="btn-add-courier" style="margin-top: 15px;">Засчитать и добавить в учет</button>
                 </div>
 
                 <div class="card">
@@ -1690,14 +1709,14 @@
                         <thead>
                             <tr>
                                 <th>Время</th>
+                                <th>Кол-во</th>
                                 <th>Цена за 1 шт.</th>
-                                <th>Количество</th>
                                 <th>Заработано</th>
                                 <th style="width: 40px;"></th>
                             </tr>
                         </thead>
                         <tbody id="courier-history-list">
-                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей о закладках</td></tr>
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">История закладок пуста</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1760,7 +1779,7 @@
         <!-- Раздел Рейтинг -->
         <div id="tab-rating" class="tab-content">
             <div class="card">
-                <h2>🏆 Рейтинг угонщиков (Авто)</h2>
+                <h2>🏆 Рейтинг угонщиков (Фарм)</h2>
                 <table>
                     <thead>
                         <tr>
@@ -1777,7 +1796,7 @@
             </div>
 
             <div class="card">
-                <h2>📦 Рейтинг закладчиков</h2>
+                <h2>📦 Рейтинг закладчиков (Фарм)</h2>
                 <table>
                     <thead>
                         <tr>
@@ -1805,7 +1824,7 @@
                         </tr>
                     </thead>
                     <tbody id="rating-reseller-list">
-                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по продажам</td></tr>
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1822,7 +1841,7 @@
                         </tr>
                     </thead>
                     <tbody id="rating-casino-list">
-                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет данных по казино</td></tr>
+                        <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Загрузка рейтинга...</td></tr>
                     </tbody>
                 </table>
             </div>
