@@ -350,7 +350,6 @@
             return login.trim().toLowerCase() + "@gta-tracker.local";
         }
 
-        // Форматирование чисел пробелами (1 000 000)
         window.formatMoneyInput = function(input) {
             let value = input.value.replace(/\D/g, '');
             if (value === "") {
@@ -583,7 +582,6 @@
                 let login = u.login;
                 if (!login || login.startsWith("Игрок_") || login === "Игрок" || login === "Неизвестный") return;
 
-                // Угонщик
                 if (u.history) {
                     u.history.forEach(h => {
                         if (h.status !== 'caught') {
@@ -601,7 +599,6 @@
                     });
                 }
 
-                // Закладчик
                 if (u.courierHistory) {
                     u.courierHistory.forEach(c => {
                         let day = c.date || todayStr;
@@ -617,7 +614,6 @@
                     });
                 }
 
-                // Перекуп
                 if (u.resellerItems) {
                     u.resellerItems.forEach(item => {
                         if (item.status === 'sold') {
@@ -635,7 +631,6 @@
                     });
                 }
 
-                // Казино
                 if (u.diceHistory) {
                     u.diceHistory.forEach(d => {
                         if (!casinoStats[login]) casinoStats[login] = { wins: 0, losses: 0, net: 0 };
@@ -650,7 +645,6 @@
                 }
             });
 
-            // 1. Угонщики
             let theftArray = Object.keys(theftStats).map(login => ({ login, ...theftStats[login] }));
             theftArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
@@ -668,7 +662,6 @@
                 `).join('');
             }
 
-            // 2. Закладчики
             let courierArray = Object.keys(courierStats).map(login => ({ login, ...courierStats[login] }));
             courierArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
@@ -686,7 +679,6 @@
                 `).join('');
             }
 
-            // 3. Перекупы
             let resellerArray = Object.keys(resellerStats).map(login => ({ login, ...resellerStats[login] }));
             resellerArray.sort((a, b) => b.totalProfit - a.totalProfit);
 
@@ -707,7 +699,6 @@
                 }).join('');
             }
 
-            // 4. Казино
             let casinoArray = Object.keys(casinoStats).map(login => ({ login, ...casinoStats[login] }));
             casinoArray.sort((a, b) => b.net - a.net);
 
@@ -794,7 +785,7 @@
                             <tr>
                                 <td>${login}</td>
                                 <td style="color: ${statusColor}; font-weight: bold;">${timeStr}</td>
-                                <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${login}')" title="Удалить">✕</button></td>
+                                <td style="text-align: right;"><button class="delete-btn" onclick="removeAllowedUser('${login}')" title="Удалить подписку">✕</button></td>
                             </tr>
                         `;
                     }).join('');
@@ -829,7 +820,10 @@
             alert(`Доступ для логина "${login}" успешно выдан / продлен!`);
         }
 
+        // Автоматическое удаление подписки через панель сайта
         window.removeAllowedUser = async function(login) {
+            if (!confirm(`Вы уверены, что хотите забрать подписку у пользователя "${login}"?`)) return;
+
             let docRef = doc(db, "system", "config");
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
@@ -837,6 +831,7 @@
                 delete allowedMap[login];
                 await setDoc(docRef, { allowedUsersMap: allowedMap }, { merge: true });
                 await loadAllowedUsers();
+                alert(`Подписка у пользователя "${login}" успешно забрана!`);
             }
         }
 
