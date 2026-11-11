@@ -544,7 +544,8 @@
             let casinoStats = {};
 
             usersList.forEach(u => {
-                let login = u.login || "Неизвестный";
+                let login = u.login;
+                if (!login || login === "Игрок" || login === "Неизвестный") return; // пропускаем старые пустые аккаунты
 
                 // Угонщик
                 if (u.history) {
@@ -896,13 +897,13 @@
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 userData = docSnap.data();
-                userData.login = currentLogin;
+                userData.login = currentLogin; // принудительно обновляем логин в документе
                 if (!userData.resellerItems) userData.resellerItems = [];
                 if (!userData.diceHistory) userData.diceHistory = [];
             } else {
                 userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [] };
-                await setDoc(docRef, userData);
             }
+            await saveUserData(); // сразу сохраняем актуальный логин в базе
             renderState();
         }
 
