@@ -32,7 +32,6 @@
         h1, h2 {
             text-align: center;
         }
-        /* Главное оглавление */
         .nav-tabs {
             display: flex;
             gap: 10px;
@@ -57,8 +56,6 @@
             color: var(--text-color);
             border-color: var(--accent);
         }
-
-        /* Подразделы */
         .sub-tabs {
             display: flex;
             gap: 10px;
@@ -85,19 +82,16 @@
             color: var(--text-color);
             border-color: #2563eb;
         }
-
         .tab-content {
             display: none;
         }
         .tab-content.active {
             display: block;
         }
-
         .section-block {
             scroll-margin-top: 20px;
             margin-bottom: 30px;
         }
-
         .clock-box {
             background: var(--card-bg);
             border: 1px solid var(--border);
@@ -242,29 +236,6 @@
             font-weight: bold;
             text-align: center;
         }
-        .item-img {
-            width: 45px;
-            height: 45px;
-            object-fit: cover;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            vertical-align: middle;
-            margin-right: 10px;
-            cursor: pointer;
-        }
-        .paste-zone {
-            border: 2px dashed var(--border);
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            color: var(--text-muted);
-            margin-top: 10px;
-            cursor: pointer;
-            background: #0f172a;
-        }
-        .paste-zone:hover {
-            border-color: var(--accent);
-        }
     </style>
 
     <script type="module">
@@ -331,7 +302,6 @@
         let timerInterval = null;
         let subInterval = null;
         let userExpiryTime = 0;
-        let currentUploadedImage = "";
 
         window.addEventListener('DOMContentLoaded', () => {
             const mainTabs = document.querySelectorAll('.nav-btn');
@@ -343,26 +313,6 @@
                     document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
                     document.getElementById('tab-' + tabName).classList.add('active');
                 });
-            });
-
-            // Обработка вставки скриншота через Ctrl+V или клик по зоне загрузки
-            const pasteZone = document.getElementById('paste-zone');
-            const fileInput = document.getElementById('file-input');
-
-            pasteZone.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', (e) => {
-                let file = e.target.files[0];
-                if (file) handleImageFile(file);
-            });
-
-            window.addEventListener('paste', (e) => {
-                let items = (e.clipboardData || e.originalEvent.clipboardData).items;
-                for (let item of items) {
-                    if (item.kind === 'file') {
-                        let file = item.getAsFile();
-                        if (file) handleImageFile(file);
-                    }
-                }
             });
 
             const levelSelect = document.getElementById('level-select');
@@ -449,16 +399,6 @@
             setInterval(updateClock, 1000);
             updateClock();
         });
-
-        function handleImageFile(file) {
-            let reader = new FileReader();
-            reader.onload = function(event) {
-                currentUploadedImage = event.target.result;
-                let zone = document.getElementById('paste-zone');
-                zone.innerHTML = `<img src="${currentUploadedImage}" style="max-height: 80px; border-radius: 4px;"><br><small style="color: var(--success);">Скриншот успешно прикреплен!</small>`;
-            };
-            reader.readAsDataURL(file);
-        }
 
         function formatTimeRemaining(ms) {
             if (ms <= 0) return "Истекла";
@@ -731,7 +671,6 @@
                 name: name,
                 buyPrice: buyPrice,
                 sellPrice: 0,
-                imageUrl: currentUploadedImage,
                 isRedemption: isRedemption,
                 owner: isRedemption ? owner : "",
                 startTime: Date.now(),
@@ -747,8 +686,6 @@
             document.getElementById('res-redemption').checked = false;
             document.getElementById('res-owner').value = "";
             document.getElementById('res-owner-box').style.display = 'none';
-            currentUploadedImage = "";
-            document.getElementById('paste-zone').innerHTML = `Нажмите сюда или вставьте скриншот (Ctrl + V)`;
 
             renderState();
             alert("Вещь успешно добавлена в учет!");
@@ -998,11 +935,10 @@
                     let redemptionInfo = item.isRedemption ? `<br><small style="color: var(--accent);">Под выкуп от: ${item.owner}</small>` : "";
                     let elapsedMs = Date.now() - item.startTime;
                     let timerStr = item.isRedemption ? `<br><small style="color: var(--success);" class="res-timer" data-start="${item.startTime}">Прошло: ${formatElapsedTime(elapsedMs)}</small>` : "";
-                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onclick="window.open('${item.imageUrl}')">` : "";
 
                     return `
                         <tr>
-                            <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong>${redemptionInfo}${timerStr}</div></div></td>
+                            <td><strong>${item.name}</strong>${redemptionInfo}${timerStr}</td>
                             <td>${item.buyPrice.toLocaleString()} ₽</td>
                             <td>Ещё не продано</td>
                             <td style="text-align: right;">
@@ -1026,10 +962,9 @@
                 tbody.innerHTML = activeItems.map(item => {
                     let redemptionInfo = item.isRedemption ? `Владелец (выкуп): ${item.owner}` : "Собственный товар";
                     let elapsedMs = Date.now() - item.startTime;
-                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onclick="window.open('${item.imageUrl}')">` : "";
                     return `
                         <tr>
-                            <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong><br><small style="color: var(--text-muted);">${redemptionInfo}</small></div></div></td>
+                            <td><strong>${item.name}</strong><br><small style="color: var(--text-muted);">${redemptionInfo}</small></td>
                             <td>Покупка: ${item.buyPrice.toLocaleString()} ₽</td>
                             <td>⏳ <span class="res-timer" data-start="${item.startTime}">${formatElapsedTime(elapsedMs)}</span></td>
                             <td>Активен</td>
@@ -1054,11 +989,10 @@
                     let statusText = item.status === 'sold' ? `<span style="color: var(--success);">Продано за ${item.sellPrice.toLocaleString()} ₽</span>` : `<span style="color: var(--accent);">В продаже</span>`;
                     let profit = item.status === 'sold' ? (item.sellPrice - item.buyPrice) : 0;
                     let profitStr = item.status === 'sold' ? `(Прибыль: ${profit.toLocaleString()} ₽)` : "";
-                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onclick="window.open('${item.imageUrl}')">` : "";
 
                     return `
                         <tr>
-                            <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong></div></div></td>
+                            <td><strong>${item.name}</strong></td>
                             <td>Куплено за: ${item.buyPrice.toLocaleString()} ₽</td>
                             <td>${statusText} ${profitStr}</td>
                             <td style="text-align: right;"><button class="delete-btn" onclick="deleteResellerItem(${item.id})">✕</button></td>
@@ -1144,16 +1078,11 @@
                     </div>
                 </div>
 
-                <!-- Форма добавления лота с поддержкой скриншотов -->
+                <!-- Форма добавления лота (без картинок) -->
                 <div class="card">
                     <h2>➕ Добавить вещь / лот</h2>
-                    <input type="text" id="res-name" placeholder="Название вещи (например, Кобура серая гучи)">
+                    <input type="text" id="res-name" placeholder="Название вещи">
                     <input type="number" id="res-buy" placeholder="Цена покупки (₽)">
-                    
-                    <div id="paste-zone" class="paste-zone">
-                        Нажмите сюда или вставьте скриншот (Ctrl + V)
-                    </div>
-                    <input type="file" id="file-input" accept="image/*" style="display: none;">
 
                     <div style="margin-top: 15px;">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
