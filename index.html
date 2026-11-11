@@ -34,7 +34,6 @@
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .stat-card { background: var(--bg-color); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-align: center; }
         .stat-card span { display: block; font-size: 22px; font-weight: bold; color: var(--accent); margin-top: 5px; }
-        #server-status { font-size: 12px; text-align: center; margin-bottom: 10px; color: var(--text-muted); }
     </style>
 </head>
 <body>
@@ -42,12 +41,11 @@
         <div id="auth-screen">
             <h1>GTA RP Tracker</h1>
             <div class="subtitle">Введите ваш персональный ключ доступа</div>
-            <div id="server-status">Проверка связи с сервером...</div>
             <div class="form-group">
                 <label>Ключ активации</label>
                 <input type="text" id="accessKey" placeholder="GTA-TEST-..." autocomplete="off">
             </div>
-            <button id="loginBtn" onclick="verifyKey()">Войти в систему</button>
+            <button onclick="verifyKey()">Войти в систему</button>
             <div id="message"></div>
         </div>
 
@@ -86,40 +84,17 @@
             return deviceId;
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            wakeUpServer();
-            const savedKey = localStorage.getItem('gta_tracker_active_key');
-            if (savedKey) {
-                document.getElementById('accessKey').value = savedKey;
-                verifyKey(true);
-            }
-        });
-
-        async function wakeUpServer() {
-            const statusEl = document.getElementById('server-status');
-            try {
-                const res = await fetch(`${API_URL}/api/ping`);
-                if (res.ok) {
-                    statusEl.innerText = 'Сервер активен';
-                    statusEl.style.color = 'var(--success)';
-                }
-            } catch (e) {
-                statusEl.innerText = 'Сервер просыпается...';
-                setTimeout(wakeUpServer, 3000);
-            }
-        }
-
         async function verifyKey(isAuto = false) {
             const key = document.getElementById('accessKey').value.trim();
             const msg = document.getElementById('message');
             const deviceId = getDeviceId();
-
+            
             if (!key) {
-                if (!isAuto) { msg.className = 'error'; msg.innerText = 'Введите ключ доступа!'; }
+                msg.className = 'error'; msg.innerText = 'Введите ключ доступа!';
                 return;
             }
 
-            if (!isAuto) { msg.className = ''; msg.innerText = 'Проверка ключа...'; }
+            msg.className = ''; msg.innerText = 'Проверка ключа на сервере...';
 
             try {
                 const response = await fetch(`${API_URL}/api/verify-key`, {
@@ -137,18 +112,12 @@
                     document.getElementById('expiry-info').innerText = `Доступ активен до: ${new Date(data.expires_at).toLocaleString()}`;
                     loadStats();
                 } else {
-                    if (!isAuto) {
-                        msg.className = 'error';
-                        msg.innerText = data.error || 'Неверный ключ доступа';
-                    } else {
-                        localStorage.removeItem('gta_tracker_active_key');
-                    }
+                    msg.className = 'error';
+                    msg.innerText = data.error || 'Ошибка проверки ключа';
                 }
             } catch (err) {
-                if (!isAuto) {
-                    msg.className = 'error';
-                    msg.innerText = 'Ошибка сети или бэкенд недоступен.';
-                }
+                msg.className = 'error';
+                msg.innerText = 'Сервер просыпается после сна. Подождите 10 секунд и нажмите еще раз.';
             }
         }
 
