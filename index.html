@@ -67,6 +67,7 @@
             display: flex;
             gap: 15px;
             margin-bottom: 25px;
+            flex-wrap: wrap;
         }
         .nav-btn {
             flex: 1;
@@ -385,7 +386,7 @@
 
         let currentUser = null;
         let currentLogin = "";
-        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [] };
+        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], debts: [] };
         let timerInterval = null;
         let subInterval = null;
         let globalRefreshInterval = null;
@@ -430,13 +431,13 @@
 
             window.addEventListener('popstate', (e) => {
                 let path = window.location.pathname.replace('/', '') || 'perekup';
-                if (['perekup', 'farm', 'casino', 'rating'].includes(path)) {
+                if (['perekup', 'farm', 'casino', 'debts', 'rating'].includes(path)) {
                     switchTab(path, false);
                 }
             });
 
             let initialPath = window.location.pathname.replace('/', '');
-            if (['perekup', 'farm', 'casino', 'rating'].includes(initialPath)) {
+            if (['perekup', 'farm', 'casino', 'debts', 'rating'].includes(initialPath)) {
                 switchTab(initialPath, false);
             } else {
                 switchTab('perekup', true);
@@ -464,6 +465,7 @@
             document.getElementById('btn-add-reseller-item').addEventListener('click', addResellerItem);
             document.getElementById('btn-add-dice').addEventListener('click', addDiceGame);
             document.getElementById('btn-add-courier').addEventListener('click', addCourierRecord);
+            document.getElementById('btn-add-debt').addEventListener('click', addDebtRecord);
 
             updateCarList();
 
@@ -954,8 +956,9 @@
                 if (!userData.resellerItems) userData.resellerItems = [];
                 if (!userData.diceHistory) userData.diceHistory = [];
                 if (!userData.courierHistory) userData.courierHistory = [];
+                if (!userData.debts) userData.debts = [];
             } else {
-                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [] };
+                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], debts: [] };
             }
             await saveUserData();
             renderState();
@@ -966,6 +969,42 @@
             userData.login = currentLogin;
             let docRef = doc(db, "users", currentUser.uid);
             await setDoc(docRef, userData, { merge: true });
+        }
+
+        // Логика Долгов
+        async function addDebtRecord() {
+            let person = document.getElementById('debt-person').value.trim();
+            let amount = parseFloat(document.getElementById('debt-amount').value) || 0;
+            let type = document.getElementById('debt-type').value; // 'i_owe' (я должен) или 'owes_me' (мне должны)
+
+            if (!person || amount <= 0) {
+                alert("Введите имя человека и корректную сумму!");
+                return;
+            }
+
+            let now = new Date();
+            let record = {
+                id: Date.now(),
+                person: person,
+                amount: amount,
+                type: type,
+                time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+            };
+
+            userData.debts.unshift(record);
+            await saveUserData();
+
+            document.getElementById('debt-person').value = "";
+            document.getElementById('debt-amount').value = "";
+            renderState();
+            alert("Запись о долге успешно добавлена!");
+        }
+
+        window.deleteDebtItem = async function(id) {
+            userData.debts = userData.debts.filter(d => d.id !== id);
+            await saveUserData();
+            renderState();
         }
 
         async function addCourierRecord() {
@@ -1300,6 +1339,7 @@
             renderResellerAnalytics();
             renderDiceState();
             renderCourierState();
+            renderDebtsState();
         }
 
         function renderResellerCabinet() {
@@ -1456,6 +1496,34 @@
                 `).join('');
             }
         }
+
+        function renderDebtsState() {
+            let debtsList = userData.debts || [];
+            let totalIOwe = debtsList.filter(d => d.type === 'i_owe').reduce((sum, d) => sum + d.amount, 0);
+            let totalOwesMe = debtsList.filter(d => d.type === 'owes_me').reduce((sum, d) => sum + d.amount, 0);
+
+            document.getElementById('debt-stat-i-owe').textContent = totalIOwe.toLocaleString() + ' ₽';
+            document.getElementById('debt-stat-owes-me').textContent = totalOwesMe.toLocaleString() + ' ₽';
+
+            let tbody = document.getElementById('debts-history-list');
+            if (debtsList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Список долгов пуст</td></tr>`;
+            } else {
+                tbody.innerHTML = debtsList.map(item => {
+                    let isIOwe = item.type === 'i_owe';
+                    let typeText = isIOwe ? `<span style="color: var(--danger);">Я должен</span>` : `<span style="color: var(--success);">Мне должны</span>`;
+                    return `
+                        <tr>
+                            <td>${item.date} ${item.time}</td>
+                            <td><strong>${item.person}</strong></td>
+                            <td style="font-weight: bold;">${item.amount.toLocaleString()} ₽</td>
+                            <td>${typeText}</td>
+                            <td style="text-align: right;"><button class="delete-btn" onclick="deleteDebtItem(${item.id})">✕</button></td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+        }
     </script>
 </head>
 <body>
@@ -1499,6 +1567,7 @@
             <a href="https://ro-helper.ru/perekup" class="nav-btn active" data-tab="perekup">📈 Перекуп</a>
             <a href="https://ro-helper.ru/farm" class="nav-btn" data-tab="farm">💰 Фарм</a>
             <a href="https://ro-helper.ru/casino" class="nav-btn" data-tab="casino">🎰 Казино</a>
+            <a href="https://ro-helper.ru/debts" class="nav-btn" data-tab="debts">💸 Долги</a>
             <a href="https://ro-helper.ru/rating" class="nav-btn" data-tab="rating">🏆 Рейтинг</a>
         </div>
 
@@ -1770,6 +1839,55 @@
                     </thead>
                     <tbody id="dice-history-list">
                         <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">История игр в кости пуста</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Раздел Долги -->
+        <div id="tab-debts" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div>Всего я должен</div>
+                    <div id="debt-stat-i-owe" class="stat-value" style="color: var(--danger);">0 ₽</div>
+                </div>
+                <div class="stat-card">
+                    <div>Всего должны мне</div>
+                    <div id="debt-stat-owes-me" class="stat-value" style="color: var(--success);">0 ₽</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>💸 Добавить запись о долге</h2>
+                <label for="debt-person">Имя / Логин человека:</label>
+                <input type="text" id="debt-person" placeholder="Например, Максим">
+
+                <label for="debt-amount" style="margin-top: 15px; display: block;">Сумма (₽):</label>
+                <input type="number" id="debt-amount" placeholder="Например, 1000000">
+
+                <label for="debt-type" style="margin-top: 15px; display: block;">Тип долга:</label>
+                <select id="debt-type">
+                    <option value="i_owe">Я должен</option>
+                    <option value="owes_me">Мне должны</option>
+                </select>
+
+                <button id="btn-add-debt" style="margin-top: 15px;">Добавить долг</button>
+            </div>
+
+            <div class="card">
+                <h2>Список долгов</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Дата / Время</th>
+                            <th>Человек</th>
+                            <th>Сумма</th>
+                            <th>Статус</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="debts-history-list">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Список долгов пуст</td></tr>
                     </tbody>
                 </table>
             </div>
