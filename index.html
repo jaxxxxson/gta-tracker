@@ -3,126 +3,304 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTA RP Tracker - Угон транспорта</title>
+    <title>Трекер угона авто (GTA RP)</title>
     <style>
         :root {
             --bg-color: #0f172a;
             --card-bg: #1e293b;
-            --accent: #38bdf8;
-            --accent-hover: #0ea5e9;
-            --text: #f8fafc;
+            --text-color: #f8fafc;
             --text-muted: #94a3b8;
-            --border: #334155;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
             --danger: #ef4444;
-            --success: #10b981;
+            --success: #22c55e;
+            --border: #334155;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .container { width: 100%; max-width: 650px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        h1, h2 { text-align: center; margin-bottom: 15px; }
-        .subtitle { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 14px; }
-        input, select { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; outline: none; }
-        input:focus, select:focus { border-color: var(--accent); }
-        button { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: #0f172a; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
-        button:hover { background: var(--accent-hover); }
-        .timer-display { text-align: center; font-size: 28px; font-weight: bold; color: var(--success); margin: 15px 0; background: var(--bg-color); padding: 15px; border-radius: 8px; border: 1px solid var(--border); }
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .stat-card { background: var(--bg-color); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-align: center; }
-        .stat-card span { display: block; font-size: 22px; font-weight: bold; color: var(--accent); margin-top: 5px; }
-        .history-list { margin-top: 20px; max-height: 150px; overflow-y: auto; background: var(--bg-color); padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 14px; }
-        .history-item { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            text-align: center;
+        }
+        .clock-box {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+        }
+        .time-val {
+            color: var(--accent);
+            font-weight: bold;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        select, button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #0f172a;
+            color: var(--text-color);
+            font-size: 1rem;
+            margin-top: 10px;
+            outline: none;
+        }
+        select:focus {
+            border-color: var(--accent);
+        }
+        button {
+            background: var(--accent);
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: none;
+        }
+        button:hover {
+            background: var(--accent-hover);
+        }
+        button.danger {
+            background: var(--danger);
+        }
+        button.danger:hover {
+            background: #dc2626;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.95rem;
+        }
+        th {
+            color: var(--text-muted);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--success);
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>GTA RP Tracker</h1>
-        <div class="subtitle">Управление угонами и таймер сдачи транспорта</div>
 
-        <div class="form-group">
-            <label>Выберите автомобиль / уровень</label>
-            <select id="carSelect">
-                <optgroup label="Обычные авто">
-                    <option value="Karin Sultan|15000">Karin Sultan ($15,000)</option>
-                    <option value="Benefactor Schafter|18000">Benefactor Schafter ($18,000)</option>
-                    <option value="Lampadati Felon|22000">Lampadati Felon ($22,000)</option>
-                </optgroup>
-                <optgroup label="Элитный 7 уровень">
-                    <option value="Pfister Comet S2|45000">Pfister Comet S2 ($45,000)</option>
-                    <option value="Obey Tailgater S|50000">Obey Tailgater S ($50,000)</option>
-                    <option value="Übermacht Sentinel XS|60000">Übermacht Sentinel XS ($60,000)</option>
-                </optgroup>
-            </select>
+<div class="container">
+    <h1>Трекер угона авто (GTA RP)</h1>
+    
+    <div class="clock-box">
+        Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
+        Статус: <span id="time-status" style="font-weight: bold;">--</span>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div>Угонов за сегодня</div>
+            <div id="today-count" class="stat-value">0</div>
         </div>
-
-        <button onclick="startTracker()">Начать угон / Запустить таймер</button>
-
-        <div class="timer-display" id="timer">00:00</div>
-
-        <div class="stats-grid">
-            <div class="stat-card">Всего угонов <span id="totalThefts">0</span></div>
-            <div class="stat-card">Заработано ($) <span id="totalEarned">0</span></div>
-        </div>
-
-        <div class="history-list" id="historyList">
-            <div style="color: var(--text-muted); text-align: center;">История угонов пуста</div>
+        <div class="stat-card">
+            <div>Заработано за сегодня</div>
+            <div id="today-earned" class="stat-value">0 ₽</div>
         </div>
     </div>
 
-    <script>
-        let countdown;
+    <div class="card" id="active-panel" style="display:none;">
+        <h2>Активный угон</h2>
+        <p>Автомобиль: <strong id="active-car-name"></strong></p>
+        <p>Статус: <span style="color: var(--success);">В процессе...</span></p>
+        <button class="danger" onclick="finishTheft()">Закончить сдачу</button>
+    </div>
 
-        function startTracker() {
-            const select = document.getElementById('carSelect');
-            const [carName, rewardStr] = select.value.split('|');
-            const reward = parseInt(rewardStr);
+    <div class="card" id="start-panel">
+        <h2>Начать новый угон</h2>
+        <label for="car-select">Выберите автомобиль (7 уровень):</label>
+        <select id="car-select"></select>
+        <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
+        <button onclick="startTheft()">Начать поиск / угон</button>
+    </div>
 
-            let timeLeft = 180; // 3 минуты таймер
-            clearInterval(countdown);
+    <div class="card">
+        <h2>История сданных авто за сегодня</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Автомобиль</th>
+                    <th>Время сдачи</th>
+                    <th>Цена</th>
+                </tr>
+            </thead>
+            <tbody id="history-list">
+                <tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
 
-            countdown = setInterval(() => {
-                let minutes = Math.floor(timeLeft / 60);
-                let seconds = timeLeft % 60;
-                document.getElementById('timer').innerText = 
-                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+<script>
+    const cars = [
+        { name: "Daimler-AMX SL R232", day: 18900, night: 9450 },
+        { name: "Ferruccio Siun", day: 65625, night: 46875 },
+        { name: "Molsheim Formula", day: 65625, night: 46875 },
+        { name: "Wayn GT", day: 65625, night: 46875 },
+        { name: "Wurttem 918 Spyder", day: 65625, night: 46875 },
+        { name: "Ferruccio Verano", day: 65625, night: 46875 },
+        { name: "Molsheim Vivo", day: 65625, night: 46875 },
+        { name: "Leslie Ayrton", day: 65625, night: 46875 },
+        { name: "Molsheim Shiron", day: 65625, night: 46875 },
+        { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
+        { name: "Maranello FXX-K", day: 65625, night: 46875 }
+    ];
 
-                if (timeLeft <= 0) {
-                    clearInterval(countdown);
-                    document.getElementById('timer').innerText = 'Время вышло!';
-                    addStats(carName, reward);
-                }
-                timeLeft--;
-            }, 1000);
+    let activeTheft = JSON.parse(localStorage.getItem('activeTheft')) || null;
+    let history = JSON.parse(localStorage.getItem('theftHistory')) || [];
+
+    const selectEl = document.getElementById('car-select');
+    cars.forEach((car, index) => {
+        let opt = document.createElement('option');
+        opt.value = index;
+        opt.textContent = car.name;
+        selectEl.appendChild(opt);
+    });
+
+    selectEl.addEventListener('change', updateCarInfo);
+
+    function isNightTime(date) {
+        let hours = date.getHours();
+        let minutes = date.getMinutes();
+        let totalMins = hours * 60 + minutes;
+        return totalMins >= 60 && totalMins < 540;
+    }
+
+    function updateClock() {
+        let now = new Date();
+        let mskOptions = { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+        let mskString = now.toLocaleTimeString('ru-RU', mskOptions);
+        
+        document.getElementById('msk-time').textContent = mskString;
+        
+        let night = isNightTime(now);
+        let statusEl = document.getElementById('time-status');
+        if (night) {
+            statusEl.textContent = "🌙 Ночь (пониженная цена)";
+            statusEl.style.color = "#3b82f6";
+        } else {
+            statusEl.textContent = "☀️ День (обычная цена)";
+            statusEl.style.color = "#22c55e";
+        }
+        updateCarInfo();
+    }
+
+    function updateCarInfo() {
+        let idx = selectEl.value;
+        let car = cars[idx];
+        let now = new Date();
+        let night = isNightTime(now);
+        let currentPrice = night ? car.night : car.day;
+        
+        document.getElementById('selected-car-info').innerHTML = 
+            `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${currentPrice.toLocaleString()} ₽</strong>`;
+    }
+
+    function startTheft() {
+        let idx = selectEl.value;
+        activeTheft = {
+            carIndex: idx,
+            startTime: new Date().toISOString()
+        };
+        localStorage.setItem('activeTheft', JSON.stringify(activeTheft));
+        renderState();
+    }
+
+    function finishTheft() {
+        if (!activeTheft) return;
+        let now = new Date();
+        let night = isNightTime(now);
+        let car = cars[activeTheft.carIndex];
+        let price = night ? car.night : car.day;
+
+        let record = {
+            name: car.name,
+            time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+            price: price,
+            date: now.toDateString()
+        };
+
+        history.unshift(record);
+        localStorage.setItem('theftHistory', JSON.stringify(history));
+
+        activeTheft = null;
+        localStorage.removeItem('activeTheft');
+        renderState();
+    }
+
+    function renderState() {
+        if (activeTheft) {
+            document.getElementById('active-panel').style.display = 'block';
+            document.getElementById('start-panel').style.display = 'none';
+            document.getElementById('active-car-name').textContent = cars[activeTheft.carIndex].name;
+        } else {
+            document.getElementById('active-panel').style.display = 'none';
+            document.getElementById('start-panel').style.display = 'block';
         }
 
-        function addStats(car, reward) {
-            let stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0, "history": []}');
-            stats.count += 1;
-            stats.earned += reward;
-            stats.history.unshift({ car, reward, time: new Date().toLocaleTimeString() });
+        let todayStr = new Date().toDateString();
+        let todayHistory = history.filter(h => h.date === todayStr);
 
-            localStorage.setItem('gta_tracker_stats', JSON.stringify(stats));
-            loadStats();
+        document.getElementById('today-count').textContent = todayHistory.length;
+        let totalEarned = todayHistory.reduce((sum, item) => sum + item.price, 0);
+        document.getElementById('today-earned').textContent = totalEarned.toLocaleString() + ' ₽';
+
+        let tbody = document.getElementById('history-list');
+        if (todayHistory.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Пока нет записей за сегодня</td></tr>`;
+        } else {
+            tbody.innerHTML = todayHistory.map(item => `
+                <tr>
+                    <td>${item.name}</td>
+                    <td>${item.time}</td>
+                    <td>${item.price.toLocaleString()} ₽</td>
+                </tr>
+            `).join('');
         }
+    }
 
-        function loadStats() {
-            let stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0, "history": []}');
-            document.getElementById('totalThefts').innerText = stats.count;
-            document.getElementById('totalEarned').innerText = stats.earned;
+    setInterval(updateClock, 1000);
+    updateClock();
+    renderState();
+</script>
 
-            const historyEl = document.getElementById('historyList');
-            if (stats.history.length > 0) {
-                historyEl.innerHTML = stats.history.map(item => `
-                    <div class="history-item">
-                        <span>${item.car} (+${item.reward}$)</span>
-                        <span style="color: var(--text-muted);">${item.time}</span>
-                    </div>
-                `).join('');
-            }
-        }
-
-        window.onload = loadStats;
-    </script>
 </body>
 </html>
