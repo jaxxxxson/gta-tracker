@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTA RP Tracker - Вход по ключу</title>
+    <title>GTA RP Tracker - Личный кабинет</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -18,70 +18,146 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text); min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
-        .container { width: 100%; max-width: 450px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-        h1 { text-align: center; margin-bottom: 8px; font-size: 24px; }
-        .subtitle { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; color: var(--text-muted); font-size: 14px; }
-        input { width: 100%; padding: 12px 16px; background: var(--bg-color); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; outline: none; text-align: center; letter-spacing: 1px; }
+        .container { width: 100%; max-width: 600px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        h1, h2 { text-align: center; margin-bottom: 15px; }
+        .subtitle { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 14px; }
+        input { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; outline: none; }
         input:focus { border-color: var(--accent); }
-        button { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: #0f172a; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s; }
+        button { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: #0f172a; font-weight: bold; font-size: 16px; cursor: pointer; transition: background 0.2s; margin-top: 10px; }
         button:hover { background: var(--accent-hover); }
+        .hidden { display: none !important; }
         #message { margin-top: 15px; text-align: center; font-size: 14px; }
         .error { color: var(--danger); }
         .success { color: var(--success); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .stat-card { background: var(--bg-color); border: 1px solid var(--border); border-radius: 12px; padding: 15px; text-align: center; }
+        .stat-card span { display: block; font-size: 22px; font-weight: bold; color: var(--accent); margin-top: 5px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>GTA RP Tracker</h1>
-        <div class="subtitle">Введите ваш временный ключ доступа</div>
-        
-        <div class="form-group">
-            <label>Ключ активации</label>
-            <input type="text" id="accessKey" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off">
+        <div id="auth-screen">
+            <h1>GTA RP Tracker</h1>
+            <div class="subtitle">Введите ваш персональный ключ доступа</div>
+            <div class="form-group">
+                <label>Ключ активации</label>
+                <input type="text" id="accessKey" placeholder="GTA-TEST-..." autocomplete="off">
+            </div>
+            <button onclick="verifyKey()">Войти в систему</button>
+            <div id="message"></div>
         </div>
-        
-        <button onclick="verifyKey()">Войти в систему</button>
-        <div id="message"></div>
+
+        <div id="dashboard-screen" class="hidden">
+            <h2>Личный кабинет угонщика</h2>
+            <div class="subtitle" id="expiry-info"></div>
+
+            <div class="form-group">
+                <label>Модель угоняемого транспорта</label>
+                <input type="text" id="carModel" placeholder="Например: Karin Sultan">
+            </div>
+            <div class="form-group">
+                <label>Получено опыта / Выплата ($)</label>
+                <input type="number" id="carReward" placeholder="Сумма или опыт">
+            </div>
+            <button onclick="addTheft()">Добавить угон в статистику</button>
+
+            <div class="stats-grid">
+                <div class="stat-card">Всего угонов <span id="totalThefts">0</span></div>
+                <div class="stat-card">Заработано ($) <span id="totalEarned">0</span></div>
+            </div>
+
+            <button onclick="logout()" style="background: transparent; border: 1px solid var(--border); color: var(--text); margin-top: 20px;">Выйти</button>
+        </div>
     </div>
 
     <script>
-        async function verifyKey() {
+        function getDeviceId() {
+            let deviceId = localStorage.getItem('gta_tracker_device_id');
+            if (!deviceId) {
+                deviceId = 'dev_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+                localStorage.setItem('gta_tracker_device_id', deviceId);
+            }
+            return deviceId;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('gta_tracker_active_key');
+            if (savedKey) {
+                document.getElementById('accessKey').value = savedKey;
+                verifyKey(true);
+            }
+        });
+
+        async function verifyKey(isAuto = false) {
             const key = document.getElementById('accessKey').value.trim();
             const msg = document.getElementById('message');
+            const deviceId = getDeviceId();
             
             if (!key) {
-                msg.className = 'error';
-                msg.innerText = 'Введите ключ доступа!';
+                if (!isAuto) { msg.className = 'error'; msg.innerText = 'Введите ключ доступа!'; }
                 return;
             }
 
-            msg.className = '';
-            msg.innerText = 'Проверка ключа...';
+            if (!isAuto) { msg.className = ''; msg.innerText = 'Проверка ключа...'; }
 
             try {
-                // Запрос к твоему бэкенду на Render для проверки ключа и его срока действия
                 const response = await fetch('https://gta-tracker-api-7oo0.onrender.com/api/verify-key', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key })
+                    body: JSON.stringify({ key, device_id: deviceId })
                 });
 
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    msg.className = 'success';
-                    msg.innerText = `Ключ действителен! Вход выполнен (до ${data.expires_at || 'бессрочно'})`;
-                    // Здесь будет перенаправление на главный экран трекера угонов
+                    localStorage.setItem('gta_tracker_active_key', key);
+                    document.getElementById('auth-screen').classList.add('hidden');
+                    document.getElementById('dashboard-screen').classList.remove('hidden');
+                    document.getElementById('expiry-info').innerText = `Доступ активен до: ${new Date(data.expires_at).toLocaleString()}`;
+                    loadStats();
                 } else {
-                    msg.className = 'error';
-                    msg.innerText = data.error || 'Неверный или просроченный ключ!';
+                    if (!isAuto) {
+                        msg.className = 'error';
+                        msg.innerText = data.error || 'Ошибка проверки ключа';
+                    } else {
+                        localStorage.removeItem('gta_tracker_active_key');
+                    }
                 }
             } catch (err) {
-                msg.className = 'error';
-                msg.innerText = 'Ошибка соединения с сервером бэкенда.';
+                if (!isAuto) {
+                    msg.className = 'error';
+                    msg.innerText = 'Ошибка соединения с сервером бэкенда.';
+                }
             }
+        }
+
+        function loadStats() {
+            const stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0}');
+            document.getElementById('totalThefts').innerText = stats.count;
+            document.getElementById('totalEarned').innerText = stats.earned;
+        }
+
+        function addTheft() {
+            const model = document.getElementById('carModel').value;
+            const reward = parseInt(document.getElementById('carReward').value) || 0;
+            if (!model) { alert('Введите модель транспорта'); return; }
+
+            let stats = JSON.parse(localStorage.getItem('gta_tracker_stats') || '{"count": 0, "earned": 0}');
+            stats.count += 1;
+            stats.earned += reward;
+            localStorage.setItem('gta_tracker_stats', JSON.stringify(stats));
+
+            document.getElementById('carModel').value = '';
+            document.getElementById('carReward').value = '';
+            loadStats();
+            alert('Угон успешно добавлен в статистику!');
+        }
+
+        function logout() {
+            localStorage.removeItem('gta_tracker_active_key');
+            location.reload();
         }
     </script>
 </body>

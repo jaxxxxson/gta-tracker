@@ -6,12 +6,10 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Подключение к Supabase (используем публичные переменные или задай их здесь)
 const supabaseUrl = process.env.SUPABASE_URL || 'https://wyfkpmoyaeilxsgvnwgd.supabase.co';
-const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'; // Замени на свой service_role или anon ключ, если нужно
+const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5ZmtwbW95YWVpbHhzZ3Zud2dkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg2Mzh9.u8Y9aZgN_n2P3Kx7qQ0tL5V8W1m3J2s6X4v5b9n2m1s';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Эндпоинт проверки ключа и привязки устройства
 app.post('/api/verify-key', async (req, res) => {
     const { key, device_id } = req.body;
 
@@ -45,7 +43,7 @@ app.post('/api/verify-key', async (req, res) => {
 
         res.json({ success: true, expires_at: keyRecord.expires_at });
     } catch (err) {
-        res.status(500.0).json({ success: false, error: 'Ошибка сервера' });
+        res.status(500).json({ success: false, error: 'Ошибка сервера' });
     }
 });
 
