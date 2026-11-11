@@ -495,9 +495,9 @@
                     await loadUserData();
                     await loadGlobalRatings();
 
-                    // Автообновление рейтингов каждую минуту
+                    // Автообновление рейтингов каждые 5 минут (300000 мс)
                     if (!globalRefreshInterval) {
-                        globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
+                        globalRefreshInterval = setInterval(loadGlobalRatings, 300000);
                     }
                 } else {
                     currentUser = null;
@@ -520,7 +520,6 @@
             updateClock();
         });
 
-        // Загрузка глобальных рейтингов со всех пользователей в Firebase
         async function loadGlobalRatings() {
             try {
                 let usersSnapshot = await getDocs(collection(db, "users"));
@@ -528,8 +527,6 @@
 
                 usersSnapshot.forEach(docSnap => {
                     let uData = docSnap.data();
-                    // Вычисляем логин из ID или ищем в системе
-                    let uLogin = docSnap.id; // В нашей структуре doc.id это uid, но для удобства привяжем к логину
                     allUsersData.push(uData);
                 });
 
@@ -546,10 +543,8 @@
             let resellerStats = {};
             let casinoStats = {};
 
-            // Собираем статистику по всем пользователям
-            // Поскольку uid в Firestore, нам нужно определить логин. Сохраним логин в userData при сохранении.
             usersList.forEach(u => {
-                let login = u.login || "Игрок";
+                let login = u.login || "Неизвестный";
 
                 // Угонщик
                 if (u.history) {
@@ -590,7 +585,7 @@
                 // Казино
                 if (u.diceHistory) {
                     u.diceHistory.forEach(d => {
-                        if (!casinoStats[login]) casinoStats[login] = { wins: 0, losses: 0, net: 0, history: [] };
+                        if (!casinoStats[login]) casinoStats[login] = { wins: 0, losses: 0, net: 0 };
                         if (d.result === 'win') {
                             casinoStats[login].wins += d.amount;
                             casinoStats[login].net += d.amount;
@@ -598,14 +593,13 @@
                             casinoStats[login].losses += d.amount;
                             casinoStats[login].net -= d.amount;
                         }
-                        casinoStats[login].history.push(d);
                     });
                 }
             });
 
-            // 1. Рендер рейтинга угонщиков (Фарм)
+            // 1. Угонщики
             let theftArray = Object.keys(theftStats).map(login => ({ login, ...theftStats[login] }));
-            theftArray.sort((a, b) => b.todayEarned - a.todayEarned); // Сортировка по заработку за сегодня
+            theftArray.sort((a, b) => b.todayEarned - a.todayEarned);
 
             let theftTbody = document.getElementById('rating-theft-list');
             if (theftArray.length === 0) {
@@ -621,7 +615,7 @@
                 `).join('');
             }
 
-            // 2. Рендер рейтинга перекупов
+            // 2. Перекупы
             let resellerArray = Object.keys(resellerStats).map(login => ({ login, ...resellerStats[login] }));
             resellerArray.sort((a, b) => b.totalProfit - a.totalProfit);
 
@@ -642,7 +636,7 @@
                 }).join('');
             }
 
-            // 3. Рендер рейтинга казино
+            // 3. Казино
             let casinoArray = Object.keys(casinoStats).map(login => ({ login, ...casinoStats[login] }));
             casinoArray.sort((a, b) => b.net - a.net);
 
@@ -902,7 +896,7 @@
             let docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 userData = docSnap.data();
-                userData.login = currentLogin; // сохраняем логин в структуре для рейтингов
+                userData.login = currentLogin;
                 if (!userData.resellerItems) userData.resellerItems = [];
                 if (!userData.diceHistory) userData.diceHistory = [];
             } else {
@@ -1382,7 +1376,6 @@
             </table>
         </div>
 
-        <!-- Оглавление с рейтингом -->
         <div class="nav-tabs">
             <a href="https://ro-helper.ru/perekup" class="nav-btn active" data-tab="perekup">📈 Перекуп</a>
             <a href="https://ro-helper.ru/farm" class="nav-btn" data-tab="farm">💰 Фарм</a>
@@ -1623,7 +1616,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Игрок (Логин)</th>
+                            <th>Логин игрока</th>
                             <th>Машин за сегодня</th>
                             <th>Заработано за сегодня</th>
                             <th>Всего за всё время</th>
@@ -1640,7 +1633,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Игрок (Логин)</th>
+                            <th>Логин игрока</th>
                             <th>Последняя проданная вещь</th>
                             <th>Выручка нетто</th>
                             <th>Чистая прибыль</th>
@@ -1657,7 +1650,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>Игрок (Логин)</th>
+                            <th>Логин игрока</th>
                             <th>Выиграно</th>
                             <th>Проиграно</th>
                             <th>Итоговый баланс (Прибыль)</th>
