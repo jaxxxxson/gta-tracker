@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Помощник GTA RP (Фарм & Перекуп)</title>
+    <title>Помощник GTA RP (Перекуп & Фарм)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -23,6 +23,7 @@
             color: var(--text-color);
             margin: 0;
             padding: 20px;
+            scroll-behavior: smooth;
         }
         .container {
             max-width: 900px;
@@ -76,6 +77,8 @@
             font-weight: bold;
             cursor: pointer;
             transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
         }
         .sub-btn.active {
             background: #2563eb;
@@ -89,11 +92,10 @@
         .tab-content.active {
             display: block;
         }
-        .sub-content {
-            display: none;
-        }
-        .sub-content.active {
-            display: block;
+
+        .section-block {
+            scroll-margin-top: 20px;
+            margin-bottom: 30px;
         }
 
         .clock-box {
@@ -240,6 +242,15 @@
             font-weight: bold;
             text-align: center;
         }
+        .item-img {
+            width: 45px;
+            height: 45px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            vertical-align: middle;
+            margin-right: 10px;
+        }
     </style>
 
     <script type="module">
@@ -308,7 +319,7 @@
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Переключение главных разделов (Фарм / Перекуп)
+            // Переключение главных разделов (Перекуп / Фарм)
             const mainTabs = document.querySelectorAll('.nav-btn');
             mainTabs.forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -317,30 +328,6 @@
                     let tabName = btn.getAttribute('data-tab');
                     document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
                     document.getElementById('tab-' + tabName).classList.add('active');
-                });
-            });
-
-            // Переключение подразделов внутри Фарма
-            const farmSubs = document.querySelectorAll('.farm-sub');
-            farmSubs.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    farmSubs.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    let subName = btn.getAttribute('data-sub');
-                    document.querySelectorAll('.sub-content').forEach(sc => sc.classList.remove('active'));
-                    document.getElementById('sub-' + subName).classList.add('active');
-                });
-            });
-
-            // Переключение подразделов внутри Перекупа
-            const resellerSubs = document.querySelectorAll('.reseller-sub');
-            resellerSubs.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    resellerSubs.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    let subName = btn.getAttribute('data-reseller');
-                    document.querySelectorAll('.reseller-content').forEach(rc => rc.classList.remove('active'));
-                    document.getElementById('reseller-' + subName).classList.add('active');
                 });
             });
 
@@ -688,7 +675,7 @@
         async function addResellerItem() {
             let name = document.getElementById('res-name').value.trim();
             let buyPrice = parseFloat(document.getElementById('res-buy').value) || 0;
-            let sellPrice = parseFloat(document.getElementById('res-sell').value) || 0;
+            let imageUrl = document.getElementById('res-img').value.trim();
             let isRedemption = document.getElementById('res-redemption').checked;
             let owner = document.getElementById('res-owner').value.trim();
 
@@ -701,7 +688,8 @@
                 id: Date.now(),
                 name: name,
                 buyPrice: buyPrice,
-                sellPrice: sellPrice,
+                sellPrice: 0, // пока не продано
+                imageUrl: imageUrl,
                 isRedemption: isRedemption,
                 owner: isRedemption ? owner : "",
                 startTime: Date.now(),
@@ -714,7 +702,7 @@
             // Очищаем форму
             document.getElementById('res-name').value = "";
             document.getElementById('res-buy').value = "";
-            document.getElementById('res-sell').value = "";
+            document.getElementById('res-img').value = "";
             document.getElementById('res-redemption').checked = false;
             document.getElementById('res-owner').value = "";
             document.getElementById('res-owner-box').style.display = 'none';
@@ -730,12 +718,22 @@
 
         window.sellResellerItem = async function(id) {
             let item = userData.resellerItems.find(i => i.id === id);
-            if (item) {
-                item.status = "sold";
-                item.soldTime = Date.now();
-                await saveUserData();
-                renderState();
+            if (!item) return;
+
+            let priceStr = prompt(`За сколько вы продали вещь "${item.name}"?`, item.buyPrice);
+            if (priceStr === null) return; // отмена
+
+            let sellPrice = parseFloat(priceStr);
+            if (isNaN(sellPrice)) {
+                alert("Введите корректную сумму!");
+                return;
             }
+
+            item.sellPrice = sellPrice;
+            item.status = "sold";
+            item.soldTime = Date.now();
+            await saveUserData();
+            renderState();
         }
 
         window.deleteResellerItem = async function(id) {
@@ -747,7 +745,6 @@
         function updateResellerTimers() {
             if (!currentUser) return;
             let timerEls = document.querySelectorAll('.res-timer');
-            timerEls.push = Array.from;
             timerEls.forEach(el => {
                 let start = parseInt(el.getAttribute('data-start'));
                 if (start) {
@@ -945,29 +942,26 @@
             let soldItems = items.filter(i => i.status === 'sold');
 
             let totalSpent = activeItems.reduce((sum, i) => sum + i.buyPrice, 0);
-            let potentialProfit = activeItems.reduce((sum, i) => sum + (i.sellPrice - i.buyPrice), 0);
             let netProfit = soldItems.reduce((sum, i) => sum + (i.sellPrice - i.buyPrice), 0);
 
             document.getElementById('res-cabinet-capital').textContent = totalSpent.toLocaleString() + ' ₽';
             document.getElementById('res-cabinet-profit').textContent = netProfit.toLocaleString() + ' ₽';
-            document.getElementById('res-cabinet-potential').textContent = potentialProfit.toLocaleString() + ' ₽';
 
             let activeListEl = document.getElementById('res-cabinet-active-list');
             if (activeItems.length === 0) {
-                activeListEl.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Активных лотов пока нет</td></tr>`;
+                activeListEl.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Активных лотов пока нет</td></tr>`;
             } else {
                 activeListEl.innerHTML = activeItems.map(item => {
-                    let profit = item.sellPrice - item.buyPrice;
                     let redemptionInfo = item.isRedemption ? `<br><small style="color: var(--accent);">Под выкуп от: ${item.owner}</small>` : "";
                     let elapsedMs = Date.now() - item.startTime;
                     let timerStr = item.isRedemption ? `<br><small style="color: var(--success);" class="res-timer" data-start="${item.startTime}">Прошло: ${formatElapsedTime(elapsedMs)}</small>` : "";
+                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.style.display='none'">` : "";
 
                     return `
                         <tr>
-                            <td><strong>${item.name}</strong>${redemptionInfo}${timerStr}</td>
+                            <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong>${redemptionInfo}${timerStr}</div></div></td>
                             <td>${item.buyPrice.toLocaleString()} ₽</td>
-                            <td>${item.sellPrice.toLocaleString()} ₽</td>
-                            <td style="color: ${profit >= 0 ? 'var(--success)' : 'var(--danger)'};">${profit.toLocaleString()} ₽</td>
+                            <td>Ещё не продано</td>
                             <td style="text-align: right;">
                                 <button style="padding: 6px 10px; font-size: 0.8rem; width: auto;" onclick="sellResellerItem(${item.id})">Продать</button>
                                 <button class="delete-btn" onclick="deleteResellerItem(${item.id})" title="Удалить">✕</button>
@@ -989,11 +983,12 @@
                 tbody.innerHTML = activeItems.map(item => {
                     let redemptionInfo = item.isRedemption ? `Владелец (выкуп): ${item.owner}` : "Собственный товар";
                     let elapsedMs = Date.now() - item.startTime;
+                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.style.display='none'">` : "";
                     return `
                         <tr>
-                            <td><strong>${item.name}</strong><br><small style="color: var(--text-muted);">${redemptionInfo}</small></td>
-                            <td>Покупка: ${item.buyPrice.toLocaleString()} ₽<br>Продажа: ${item.sellPrice.toLocaleString()} ₽</td>
-                            <td>⏳ ${formatElapsedTime(elapsedMs)}</td>
+                            <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong><br><small style="color: var(--text-muted);">${redemptionInfo}</small></div></div></td>
+                            <td>Покупка: ${item.buyPrice.toLocaleString()} ₽</td>
+                            <td>⏳ <span class="res-timer" data-start="${item.startTime}">${formatElapsedTime(elapsedMs)}</span></td>
                             <td>Активен</td>
                             <td style="text-align: right;">
                                 <button style="padding: 6px 10px; font-size: 0.8rem; width: auto;" onclick="sellResellerItem(${item.id})">Продать</button>
@@ -1013,13 +1008,16 @@
                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Тетрадь пуста</td></tr>`;
             } else {
                 tbody.innerHTML = items.map(item => {
-                    let statusText = item.status === 'sold' ? `<span style="color: var(--success);">Продано</span>` : `<span style="color: var(--accent);">В продаже</span>`;
-                    let profit = item.sellPrice - item.buyPrice;
+                    let statusText = item.status === 'sold' ? `<span style="color: var(--success);">Продано за ${item.sellPrice.toLocaleString()} ₽</span>` : `<span style="color: var(--accent);">В продаже</span>`;
+                    let profit = item.status === 'sold' ? (item.sellPrice - item.buyPrice) : 0;
+                    let profitStr = item.status === 'sold' ? `(Прибыль: ${profit.toLocaleString()} ₽)` : "";
+                    let imgTag = item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.style.display='none'">` : "";
+
                     return `
                         <tr>
-                            <td>${item.name}</td>
-                            <td>-${item.buyPrice.toLocaleString()} ₽ / +${item.sellPrice.toLocaleString()} ₽</td>
-                            <td>${statusText} (Прибыль: ${profit.toLocaleString()} ₽)</td>
+                            <td><div style="display: flex; align-items: center;">${imgTag}<div><strong>${item.name}</strong></div></div></td>
+                            <td>Куплено за: ${item.buyPrice.toLocaleString()} ₽</td>
+                            <td>${statusText} ${profitStr}</td>
                             <td style="text-align: right;"><button class="delete-btn" onclick="deleteResellerItem(${item.id})">✕</button></td>
                         </tr>
                     `;
@@ -1075,90 +1073,23 @@
             </table>
         </div>
 
-        <!-- Главное оглавление: Фарм и Перекуп -->
+        <!-- Главное оглавление: Перекуп первым, Фарм вторым -->
         <div class="nav-tabs">
-            <button class="nav-btn active" data-tab="farm">💰 Фарм</button>
-            <button class="nav-btn" data-tab="reseller">📈 Перекуп</button>
-        </div>
-
-        <!-- Раздел Фарм -->
-        <div id="tab-farm" class="tab-content active">
-            <div class="sub-tabs">
-                <button class="sub-btn active" data-sub="theft">🚗 Угонщик</button>
-            </div>
-
-            <!-- Подраздел: Угонщик -->
-            <div id="sub-theft" class="sub-content active">
-                <div class="clock-box">
-                    Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
-                    Status: <span id="time-status" style="font-weight: bold;">--</span>
-                </div>
-
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div>Угонов за сегодня</div>
-                        <div id="today-count" class="stat-value">0</div>
-                    </div>
-                    <div class="stat-card">
-                        <div>Заработано за сегодня</div>
-                        <div id="today-earned" class="stat-value">0 ₽</div>
-                    </div>
-                </div>
-
-                <div class="card" id="active-panel" style="display:none;">
-                    <h2>Активный угон</h2>
-                    <p>Автомобиль: <strong id="active-car-name"></strong></p>
-                    <p>Прошло времени:</p>
-                    <div id="active-timer" class="timer-display">00:00</div>
-                    <div class="button-group">
-                        <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
-                        <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
-                    </div>
-                </div>
-
-                <div class="card" id="start-panel">
-                    <h2>Начать новый угон</h2>
-                    <label for="level-select">Выберите уровень:</label>
-                    <select id="level-select"></select>
-
-                    <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
-                    <select id="car-select"></select>
-
-                    <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
-                    <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
-                </div>
-
-                <div class="card">
-                    <h2>История угонов</h2>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Автомобиль</th>
-                                <th>Время</th>
-                                <th>Затрачено</th>
-                                <th>Результат / Цена</th>
-                                <th style="width: 40px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="history-list">
-                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <button class="nav-btn active" data-tab="reseller">📈 Перекуп</button>
+            <button class="nav-btn" data-tab="farm">💰 Фарм</button>
         </div>
 
         <!-- Раздел Перекуп -->
-        <div id="tab-reseller" class="tab-content">
+        <div id="tab-reseller" class="tab-content active">
             <div class="sub-tabs">
-                <button class="sub-btn reseller-sub active" data-reseller="cabinet">Мой кабинет</button>
-                <button class="sub-btn reseller-sub" data-reseller="property">Имущество</button>
-                <button class="sub-btn reseller-sub" data-reseller="ledger">Торговая тетрадь</button>
-                <button class="sub-btn reseller-sub" data-reseller="analytics">Аналитика</button>
+                <a href="#section-cabinet" class="sub-btn active">Мой кабинет</a>
+                <a href="#section-property" class="sub-btn">Имущество</a>
+                <a href="#section-ledger" class="sub-btn">Торговая тетрадь</a>
+                <a href="#section-analytics" class="sub-btn">Аналитика</a>
             </div>
 
             <!-- Мой кабинет -->
-            <div id="reseller-cabinet" class="reseller-content active">
+            <div id="section-cabinet" class="section-block">
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div>Капитал в вещах</div>
@@ -1168,20 +1099,15 @@
                         <div>Чистая прибыль</div>
                         <div id="res-cabinet-profit" class="stat-value">0 ₽</div>
                     </div>
-                    <div class="stat-card">
-                        <div>Потенциал остатка</div>
-                        <div id="res-cabinet-potential" class="stat-value" style="color: #f59e0b;">0 ₽</div>
-                    </div>
                 </div>
 
                 <!-- Форма добавления лота -->
                 <div class="card">
                     <h2>➕ Добавить вещь / лот</h2>
                     <input type="text" id="res-name" placeholder="Название вещи (например, Кобура серая гучи)">
-                    <div style="display: flex; gap: 10px;">
-                        <input type="number" id="res-buy" placeholder="Цена покупки (₽)">
-                        <input type="number" id="res-sell" placeholder="Цена продажи (₽)">
-                    </div>
+                    <input type="number" id="res-buy" placeholder="Цена покупки (₽)">
+                    <input type="text" id="res-img" placeholder="Ссылка на скриншот/картинку (необязательно)">
+                    
                     <div style="margin-top: 15px;">
                         <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                             <input type="checkbox" id="res-redemption" style="width: auto;" onchange="toggleRedemptionBox(this)">
@@ -1202,27 +1128,26 @@
                             <tr>
                                 <th>Вещь / Владелец / Таймер</th>
                                 <th>Покупка</th>
-                                <th>Продажа</th>
-                                <th>Прибыль</th>
+                                <th>Статус</th>
                                 <th style="width: 80px;"></th>
                             </tr>
                         </thead>
                         <tbody id="res-cabinet-active-list">
-                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Активных лотов пока нет</td></tr>
+                            <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Активных лотов пока нет</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Имущество -->
-            <div id="reseller-property" class="reseller-content">
+            <div id="section-property" class="section-block">
                 <div class="card">
                     <h2>Имущество и карточки</h2>
                     <table>
                         <thead>
                             <tr>
                                 <th>Вещь и статус</th>
-                                <th>Цены</th>
+                                <th>Покупка</th>
                                 <th>Время с момента взятия</th>
                                 <th>Статус</th>
                                 <th style="width: 80px;"></th>
@@ -1236,15 +1161,15 @@
             </div>
 
             <!-- Торговая тетрадь -->
-            <div id="reseller-ledger" class="reseller-content">
+            <div id="section-ledger" class="section-block">
                 <div class="card">
                     <h2>Торговая тетрадь (Все операции)</h2>
                     <table>
                         <thead>
                             <tr>
                                 <th>Вещь</th>
-                                <th>Суммы (Покупка / Продажа)</th>
-                                <th>Статус</th>
+                                <th>Цена покупки</th>
+                                <th>Результат</th>
                                 <th style="width: 40px;"></th>
                             </tr>
                         </thead>
@@ -1256,7 +1181,7 @@
             </div>
 
             <!-- Аналитика -->
-            <div id="reseller-analytics" class="reseller-content">
+            <div id="section-analytics" class="section-block">
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div>Чистая прибыль</div>
@@ -1267,6 +1192,70 @@
                         <div id="res-analyst-revenue" class="stat-value" style="color: var(--accent);">0 ₽</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Раздел Фарм -->
+        <div id="tab-farm" class="tab-content">
+            <div class="sub-tabs">
+                <span class="sub-btn active">🚗 Угонщик</span>
+            </div>
+
+            <div class="clock-box">
+                Московское время: <span id="msk-time" class="time-val">--:--:--</span> | 
+                Status: <span id="time-status" style="font-weight: bold;">--</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div>Угонов за сегодня</div>
+                    <div id="today-count" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div>Заработано за сегодня</div>
+                    <div id="today-earned" class="stat-value">0 ₽</div>
+                </div>
+            </div>
+
+            <div class="card" id="active-panel" style="display:none;">
+                <h2>Активный угон</h2>
+                <p>Автомобиль: <strong id="active-car-name"></strong></p>
+                <p>Прошло времени:</p>
+                <div id="active-timer" class="timer-display">00:00</div>
+                <div class="button-group">
+                    <button id="btn-finish" style="flex: 1;">Закончить сдачу</button>
+                    <button id="btn-caught" class="danger" style="flex: 1;">Поймали менты</button>
+                </div>
+            </div>
+
+            <div class="card" id="start-panel">
+                <h2>Начать новый угон</h2>
+                <label for="level-select">Выберите уровень:</label>
+                <select id="level-select"></select>
+
+                <label for="car-select" style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
+                <select id="car-select"></select>
+
+                <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
+                <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
+            </div>
+
+            <div class="card">
+                <h2>История угонов</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Автомобиль</th>
+                            <th>Время</th>
+                            <th>Затрачено</th>
+                            <th>Результат / Цена</th>
+                            <th style="width: 40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-list">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Пока нет записей</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
