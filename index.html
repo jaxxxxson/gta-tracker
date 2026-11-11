@@ -50,6 +50,8 @@
             text-align: center;
             transition: all 0.2s;
             margin: 0;
+            text-decoration: none;
+            display: inline-block;
         }
         .nav-btn.active {
             background: var(--accent);
@@ -304,16 +306,47 @@
         let userExpiryTime = 0;
 
         window.addEventListener('DOMContentLoaded', () => {
+            // Обработка ссылок и путей URL
             const mainTabs = document.querySelectorAll('.nav-btn');
+            
+            function switchTab(tabName, pushState = true) {
+                mainTabs.forEach(b => b.classList.remove('active'));
+                let targetBtn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
+                if (targetBtn) targetBtn.classList.add('active');
+
+                document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                let targetContent = document.getElementById('tab-' + tabName);
+                if (targetContent) targetContent.classList.add('active');
+
+                if (pushState) {
+                    let path = '/' + tabName;
+                    history.pushState({ tab: tabName }, '', path);
+                }
+            }
+
             mainTabs.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    mainTabs.forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
                     let tabName = btn.getAttribute('data-tab');
-                    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
-                    document.getElementById('tab-' + tabName).classList.add('active');
+                    switchTab(tabName, true);
                 });
             });
+
+            // Отслеживание кнопок «Назад / Вперед» в браузере
+            window.addEventListener('popstate', (e) => {
+                let path = window.location.pathname.replace('/', '') || 'perekup';
+                if (['perekup', 'farm', 'casino'].includes(path)) {
+                    switchTab(path, false);
+                }
+            });
+
+            // Проверяем текущий URL при загрузке
+            let initialPath = window.location.pathname.replace('/', '');
+            if (['perekup', 'farm', 'casino'].includes(initialPath)) {
+                switchTab(initialPath, false);
+            } else {
+                switchTab('perekup', true);
+            }
 
             const levelSelect = document.getElementById('level-select');
             for (let i = 1; i <= 7; i++) {
@@ -657,9 +690,8 @@
             await setDoc(docRef, userData);
         }
 
-        // Логика Казино - Кости
         async function addDiceGame() {
-            let result = document.getElementById('dice-result').value; // win или lose
+            let result = document.getElementById('dice-result').value;
             let amount = parseFloat(document.getElementById('dice-amount').value) || 0;
 
             if (amount <= 0) {
@@ -670,7 +702,7 @@
             let now = new Date();
             let record = {
                 id: Date.now(),
-                result: result, // 'win' или 'lose'
+                result: result,
                 amount: amount,
                 time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                 date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
@@ -1118,15 +1150,15 @@
             </table>
         </div>
 
-        <!-- Главное оглавление: Перекуп, Фарм, Казино -->
+        <!-- Ссылки на разделы в оглавлении -->
         <div class="nav-tabs">
-            <button class="nav-btn active" data-tab="reseller">📈 Перекуп</button>
-            <button class="nav-btn" data-tab="farm">💰 Фарм</button>
-            <button class="nav-btn" data-tab="casino">🎰 Казино</button>
+            <a href="https://ro-helper.ru/perekup" class="nav-btn active" data-tab="perekup">📈 Перекуп</a>
+            <a href="https://ro-helper.ru/farm" class="nav-btn" data-tab="farm">💰 Фарм</a>
+            <a href="https://ro-helper.ru/casino" class="nav-btn" data-tab="casino">🎰 Казино</a>
         </div>
 
         <!-- Раздел Перекуп -->
-        <div id="tab-reseller" class="tab-content active">
+        <div id="tab-perekup" class="tab-content active">
             <div class="sub-tabs">
                 <a href="#section-cabinet" class="sub-btn active">Мой кабинет</a>
                 <a href="#section-property" class="sub-btn">Имущество</a>
@@ -1134,7 +1166,6 @@
                 <a href="#section-analytics" class="sub-btn">Аналитика</a>
             </div>
 
-            <!-- Мой кабинет -->
             <div id="section-cabinet" class="section-block">
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -1182,7 +1213,6 @@
                 </div>
             </div>
 
-            <!-- Имущество -->
             <div id="section-property" class="section-block">
                 <div class="card">
                     <h2>Имущество и карточки</h2>
@@ -1203,7 +1233,6 @@
                 </div>
             </div>
 
-            <!-- Торговая тетрадь -->
             <div id="section-ledger" class="section-block">
                 <div class="card">
                     <h2>Торговая тетрадь (Все операции)</h2>
@@ -1223,7 +1252,6 @@
                 </div>
             </div>
 
-            <!-- Аналитика -->
             <div id="section-analytics" class="section-block">
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -1302,7 +1330,7 @@
             </div>
         </div>
 
-        <!-- Раздел Казино (Кости) -->
+        <!-- Раздел Казино -->
         <div id="tab-casino" class="tab-content">
             <div class="sub-tabs">
                 <span class="sub-btn active">🎲 Кости</span>
