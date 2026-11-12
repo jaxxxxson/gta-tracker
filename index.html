@@ -195,6 +195,7 @@
             levelSel.add(new Option("7 уровень", "7", true, true));
             levelSel.addEventListener('change', updateCarList);
             $('car-select').addEventListener('change', updateCarInfo);
+            $('wheel-bonus-select').addEventListener('change', updateCarInfo);
             updateCarList();
 
             $('reseller-sort').addEventListener('change', renderState);
@@ -405,11 +406,25 @@
             } catch (err) { showToast("Ошибка: " + err.message, "error"); }
         };
 
+        window.toggleWheelBonus = function(cb) {
+            $('wheel-bonus-select-box').style.display = cb.checked ? 'block' : 'none';
+            updateCarInfo();
+        };
+
+        function getActiveBonusPercent() {
+            let level = $('level-select').value;
+            if (level === '1-5') return 0;
+            let cb = $('wheel-bonus-check');
+            return (cb && cb.checked) ? (parseInt($('wheel-bonus-select').value) || 0) : 0;
+        }
+
         function updateCarList() {
             let level = $('level-select').value;
             let isLow = level === '1-5';
             $('car-select-box').style.display = isLow ? 'none' : 'block';
             $('custom-price-box').style.display = isLow ? 'block' : 'none';
+            $('wheel-bonus-container').style.display = isLow ? 'none' : 'block';
+
             if (isLow) {
                 $('selected-car-info').textContent = '';
                 $('btn-start').disabled = false;
@@ -430,7 +445,15 @@
             let car = getSelectedCar();
             if (!car) { info.textContent = ""; return; }
             let night = isNight();
-            info.innerHTML = `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(night ? car.night : car.day)} ₽</strong>`;
+            let basePrice = night ? car.night : car.day;
+            let bonusPct = getActiveBonusPercent();
+            let finalPrice = Math.round(basePrice * (1 + bonusPct / 100));
+
+            if (bonusPct > 0) {
+                info.innerHTML = `Текущая цена (${night ? 'ночь' : 'день'} + бонус ${bonusPct}%): <strong style="color: var(--success);">${fmt(finalPrice)} ₽</strong> <small style="color: var(--text-muted);">(база: ${fmt(basePrice)} ₽)</small>`;
+            } else {
+                info.innerHTML = `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(basePrice)} ₽</strong>`;
+            }
         }
 
         async function register() {
@@ -549,12 +572,13 @@
             if (level === '1-5') {
                 let customPrice = getCleanNumber('custom-theft-price');
                 if (customPrice <= 0) return showToast("Введите стоимость за авто!", "error");
-                userData.activeTheft = { level: '1-5', carName: `Авто (1-5 ур.)`, customPrice, startTime: Date.now() };
+                userData.activeTheft = { level: '1-5', carName: `Авто (1-5 ур.)`, customPrice, bonusPercent: 0, startTime: Date.now() };
                 $('custom-theft-price').value = "";
             } else {
                 let car = getSelectedCar();
                 if (!car) return;
-                userData.activeTheft = { level, carName: car.name, startTime: Date.now() };
+                let bonusPercent = getActiveBonusPercent();
+                userData.activeTheft = { level, carName: car.name, bonusPercent, startTime: Date.now() };
             }
             await saveUserData(); renderState();
             showToast(`Угон начат: ${userData.activeTheft.carName}`);
@@ -563,10 +587,20 @@
         async function finishTheft() {
             if (!userData.activeTheft) return;
             let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
-            let { carName: name, level, customPrice } = userData.activeTheft;
-            let price = (level === '1-5' || customPrice) ? (customPrice || 0) : ((carsByLevel[level]?.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0);
+            let { carName: name, level, customPrice, bonusPercent } = userData.activeTheft;
+            let bonusPct = bonusPercent || 0;
 
-            userData.history.unshift({ name, level, duration: `${Math.floor(sec / 60)} мин ${sec % 60} сек`, price, status: 'success', ...getMskNow() });
+            let price = 0;
+            if (level === '1-5' || customPrice) {
+                price = customPrice || 0;
+            } else {
+                let basePrice = (carsByLevel[level]?.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0;
+                price = Math.round(basePrice * (1 + bonusPct / 100));
+            }
+
+            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : name;
+
+            userData.history.unshift({ name: displayCarName, level, duration: `${Math.floor(sec / 60)} мин ${sec % 60} сек`, price, status: 'success', ...getMskNow() });
             userData.activeTheft = null;
             await saveUserData(); renderState(); await loadGlobalRatings();
             showToast(`Авто сдано! +${fmt(price)} ₽`);
@@ -606,7 +640,8 @@
             if (userData.activeTheft) {
                 $('active-panel').style.display = 'block';
                 $('start-panel').style.display = 'none';
-                let priceInfo = userData.activeTheft.customPrice ? ` — ${fmt(userData.activeTheft.customPrice)} ₽` : ` (${userData.activeTheft.level} ур.)`;
+                let bonusStr = userData.activeTheft.bonusPercent ? ` [Бонус +${userData.activeTheft.bonusPercent}%]` : '';
+                let priceInfo = userData.activeTheft.customPrice ? ` — ${fmt(userData.activeTheft.customPrice)} ₽` : ` (${userData.activeTheft.level} ур.)${bonusStr}`;
                 $('active-car-name').textContent = `${userData.activeTheft.carName}${priceInfo}`;
                 updateTimers();
             } else {
@@ -836,6 +871,21 @@
                     <div id="car-select-box">
                         <label style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
                         <select id="car-select"></select>
+                    </div>
+
+                    <div id="wheel-bonus-container" style="margin-top: 15px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="wheel-bonus-check" style="width: auto; margin: 0;" onchange="toggleWheelBonus(this)">
+                            <span>Бонус из колеса казино (+% к оплате)</span>
+                        </label>
+                        <div id="wheel-bonus-select-box" style="display: none; margin-top: 10px;">
+                            <select id="wheel-bonus-select">
+                                <option value="20">+20% к оплате</option>
+                                <option value="25">+25% к оплате</option>
+                                <option value="30">+30% к оплате</option>
+                                <option value="35">+35% к оплате</option>
+                            </select>
+                        </div>
                     </div>
 
                     <div id="custom-price-box" style="display:none;">
