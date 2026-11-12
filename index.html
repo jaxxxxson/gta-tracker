@@ -128,42 +128,29 @@
 
         const getCleanNumber = (id) => parseFloat($(id)?.value.replace(/\s/g, '')) || 0;
 
-        const carsByLevel = {
-            "6": [
-                { name: "Alexis LX 570", day: 45000, night: 22500 },
-                { name: "Wulfsborg Teguan AD", day: 20700, night: 10350 },
-                { name: "Blau & Weiss M3 E46", day: 21600, night: 10800 },
-                { name: "Emmett DMC-12", day: 43200, night: 21600 },
-                { name: "Blau & Weiss X5 M E70", day: 31500, night: 15750 },
-                { name: "Hebei F7", day: 10800, night: 5400 },
-                { name: "Yataro Lance Revolution IX", day: 31500, night: 15750 },
-                { name: "Yataro Sunrise D30", day: 10000, night: 5000 },
-                { name: "Cornelian Corwette C7", day: 45000, night: 22500 },
-                { name: "Daimler G-Class W463", day: 53250, night: 26625 }
-            ],
-            "7": [
-                { name: "Daimler-AMX SL R232", day: 18900, night: 13500 },
-                { name: "Ferruccio Siun", day: 65625, night: 46875 },
-                { name: "Molsheim Formula", day: 65625, night: 46875 },
-                { name: "Wayn GT", day: 65625, night: 46875 },
-                { name: "Wurttem 918 Spyder", day: 65625, night: 46875 },
-                { name: "Ferruccio Verano", day: 65625, night: 46875 },
-                { name: "Molsheim Vivo", day: 65625, night: 46875 },
-                { name: "Leslie Ayrton", day: 65625, night: 46875 },
-                { name: "Molsheim Shiron", day: 65625, night: 46875 },
-                { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
-                { name: "Maranello FXX-K", day: 65625, night: 46875 },
-                { name: "Leslie Alex", day: 65625, night: 46875 },
-                { name: "Angelholm Selip-CC850", day: 65625, night: 46875 },
-                { name: "Angelholm RG-R", day: 65625, night: 46875 },
-                { name: "Maranello 488", day: 36465, night: 23375 },
-                { name: "Ferruccio Rewuelto", day: 65625, night: 46875 },
-                { name: "Maranello Timucua SP3", day: 65625, night: 46875 },
-                { name: "York Bamford DBX", day: 45500, night: 32500 },
-                { name: "Angelholm Gesko", day: 65625, night: 46875 },
-                { name: "Leslie 720-S", day: 36750, night: 26250 }
-            ]
-        };
+        // Список автомобилей 7-го уровня
+        const level7Cars = [
+            { name: "Angelholm Gesko", day: 65625, night: 46875 },
+            { name: "Angelholm RG-R", day: 65625, night: 46875 },
+            { name: "Angelholm Selip-CC850", day: 65625, night: 46875 },
+            { name: "Daimler-AMX SL R232", day: 18900, night: 13500 },
+            { name: "Ferruccio Rewuelto", day: 65625, night: 46875 },
+            { name: "Ferruccio Siun", day: 65625, night: 46875 },
+            { name: "Ferruccio Verano", day: 65625, night: 46875 },
+            { name: "Leslie 720-S", day: 36750, night: 26250 },
+            { name: "Leslie Alex", day: 65625, night: 46875 },
+            { name: "Leslie Ayrton", day: 65625, night: 46875 },
+            { name: "Maranello 488", day: 32725, night: 23375 },
+            { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
+            { name: "Maranello FXX-K", day: 65625, night: 46875 },
+            { name: "Maranello Timucua SP3", day: 65625, night: 46875 },
+            { name: "Molsheim Formula", day: 65625, night: 46875 },
+            { name: "Molsheim Shiron", day: 65625, night: 46875 },
+            { name: "Molsheim Vivo", day: 65625, night: 46875 },
+            { name: "Wayn GT", day: 65625, night: 46875 },
+            { name: "Wurttem 918 Spyder", day: 65625, night: 46875 },
+            { name: "York Bamford DBX", day: 45500, night: 32500 }
+        ].sort((a, b) => a.name.localeCompare(b.name));
 
         let currentUser = null, currentLogin = "";
         let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [] };
@@ -194,11 +181,14 @@
             switchTab(['perekup', 'farm', 'casino', 'debts', 'rating'].includes(initialPath) ? initialPath : 'perekup', false);
 
             let levelSel = $('level-select');
-            levelSel.add(new Option("1-5 уровень", "1-5"));
-            levelSel.add(new Option("6 уровень", "6"));
+            levelSel.add(new Option("1-6 уровень", "1-6"));
             levelSel.add(new Option("7 уровень", "7", true, true));
+
+            let carSel = $('car-select');
+            level7Cars.forEach(c => carSel.add(new Option(c.name, c.name)));
+
             levelSel.addEventListener('change', updateCarList);
-            $('car-select').addEventListener('change', updateCarInfo);
+            carSel.addEventListener('change', updateCarInfo);
             $('wheel-bonus-select').addEventListener('change', updateCarInfo);
             updateCarList();
 
@@ -416,36 +406,27 @@
         };
 
         function getActiveBonusPercent() {
-            let level = $('level-select').value;
-            if (level === '1-5') return 0;
+            if ($('level-select').value !== '7') return 0;
             let cb = $('wheel-bonus-check');
             return (cb && cb.checked) ? (parseInt($('wheel-bonus-select').value) || 0) : 0;
         }
 
         function updateCarList() {
-            let level = $('level-select').value;
-            let isLow = level === '1-5';
-            $('car-select-box').style.display = isLow ? 'none' : 'block';
-            $('custom-price-box').style.display = isLow ? 'block' : 'none';
-            $('wheel-bonus-container').style.display = isLow ? 'none' : 'block';
-
-            if (isLow) {
-                $('selected-car-info').textContent = '';
-                $('btn-start').disabled = false;
-            } else {
-                let cars = [...(carsByLevel[level] || [])].sort((a, b) => a.name.localeCompare(b.name));
-                let sel = $('car-select'); sel.innerHTML = '';
-                $('btn-start').disabled = cars.length === 0;
-                cars.forEach(c => sel.add(new Option(c.name, c.name)));
-                updateCarInfo();
-            }
+            let isLevel7 = $('level-select').value === '7';
+            $('car-select-box').style.display = isLevel7 ? 'block' : 'none';
+            $('wheel-bonus-container').style.display = isLevel7 ? 'block' : 'none';
+            $('custom-price-box').style.display = isLevel7 ? 'none' : 'block';
+            updateCarInfo();
         }
 
-        const getSelectedCar = () => carsByLevel[$('level-select').value]?.find(c => c.name === $('car-select').value);
+        const getSelectedCar = () => level7Cars.find(c => c.name === $('car-select').value);
 
         function updateCarInfo() {
-            let lvl = $('level-select').value, info = $('selected-car-info');
-            if (!info || lvl === '1-5') { if (info) info.textContent = ""; return; }
+            let info = $('selected-car-info');
+            if (!info || $('level-select').value !== '7') {
+                if (info) info.textContent = "";
+                return;
+            }
             let car = getSelectedCar();
             if (!car) { info.textContent = ""; return; }
             let night = isNight();
@@ -573,16 +554,16 @@
 
         async function startTheft() {
             let level = $('level-select').value;
-            if (level === '1-5') {
+            if (level === '1-6') {
                 let customPrice = getCleanNumber('custom-theft-price');
                 if (customPrice <= 0) return showToast("Введите стоимость за авто!", "error");
-                userData.activeTheft = { level: '1-5', carName: `Авто (1-5 ур.)`, customPrice, bonusPercent: 0, startTime: Date.now() };
+                userData.activeTheft = { level: '1-6', carName: `Авто (1-6 ур.)`, customPrice, bonusPercent: 0, startTime: Date.now() };
                 $('custom-theft-price').value = "";
             } else {
                 let car = getSelectedCar();
                 if (!car) return;
                 let bonusPercent = getActiveBonusPercent();
-                userData.activeTheft = { level, carName: car.name, bonusPercent, startTime: Date.now() };
+                userData.activeTheft = { level: '7', carName: car.name, bonusPercent, startTime: Date.now() };
             }
             await saveUserData(); renderState();
             showToast(`Угон начат: ${userData.activeTheft.carName}`);
@@ -595,10 +576,10 @@
             let bonusPct = bonusPercent || 0;
 
             let price = 0;
-            if (level === '1-5' || customPrice) {
+            if (level !== '7' || customPrice) {
                 price = customPrice || 0;
             } else {
-                let basePrice = (carsByLevel[level]?.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0;
+                let basePrice = (level7Cars.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0;
                 price = Math.round(basePrice * (1 + bonusPct / 100));
             }
 
