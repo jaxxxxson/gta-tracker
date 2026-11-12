@@ -32,8 +32,9 @@
         }
         h1 span { display: block; font-size: 0.9rem; font-weight: 500; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-top: 5px; -webkit-text-fill-color: var(--accent); }
         h2 { font-size: 1.3rem; font-weight: 700; color: #f9fafb; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; }
-        .nav-tabs, .sub-tabs { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
-        .sub-tabs { padding-left: 15px; border-left: 3px solid var(--accent); }
+        .nav-tabs, .sub-tabs { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; align-items: center; }
+        .sub-tabs { padding-left: 15px; border-left: 3px solid var(--accent); justify-content: space-between; }
+        .sub-tabs-links { display: flex; gap: 10px; flex-wrap: wrap; }
         .nav-btn, .sub-btn {
             flex: 1; padding: 16px; border-radius: 14px; border: 1px solid var(--card-border);
             background: var(--card-bg); backdrop-filter: blur(12px); color: var(--text-muted);
@@ -69,9 +70,11 @@
         .user-bar { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 22px; border-radius: 14px; border: 1px solid var(--card-border); margin-bottom: 25px; }
         .button-group { display: flex; gap: 12px; }
         .caught-row { color: var(--danger); }
-        .delete-btn { background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; padding: 0; width: auto; margin: 0; box-shadow: none; }
+        .delete-btn { background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; padding: 6px 10px; width: auto; margin: 0; box-shadow: none; }
         .delete-btn:hover { color: var(--danger); transform: none; }
         .day-header { background: rgba(3, 7, 18, 0.5); color: var(--accent); font-weight: 700; text-align: center; }
+        .sort-box { display: flex; align-items: center; gap: 10px; }
+        .sort-box select { width: auto; margin-top: 0; padding: 9px 14px; font-size: 0.9rem; border-color: rgba(245, 158, 11, 0.4); }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -83,7 +86,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteField, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAT03HslnNWesJcagAB-dFfITaQTrz8qw8",
@@ -201,6 +204,8 @@
             document.getElementById('car-select').addEventListener('change', updateCarInfo);
             updateCarList();
 
+            document.getElementById('reseller-sort').addEventListener('change', renderState);
+
             document.getElementById('btn-login').addEventListener('click', login);
             document.getElementById('btn-register').addEventListener('click', register);
             document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
@@ -284,7 +289,6 @@
                 let l = u.login;
                 if (!l || l.startsWith("Игрок_") || l === "Игрок" || l === "Неизвестный") return;
 
-                // 1. Угонщик
                 u.history?.forEach(x => {
                     if (x.status !== 'caught') {
                         if (!theft[l]) theft[l] = { c: 0, e: 0, tc: 0, te: 0 };
@@ -297,7 +301,6 @@
                     }
                 });
 
-                // 2. Закладчик
                 u.courierHistory?.forEach(x => {
                     if (!courier[l]) courier[l] = { c: 0, e: 0, tc: 0, te: 0 };
                     courier[l].tc += (x.count || 0);
@@ -308,7 +311,6 @@
                     }
                 });
 
-                // 3. Ограбление домов
                 u.houseHistory?.forEach(x => {
                     if (!house[l]) house[l] = { c: 0, e: 0, tc: 0, te: 0 };
                     house[l].tc++;
@@ -319,7 +321,6 @@
                     }
                 });
 
-                // 4. Перекуп
                 u.resellerItems?.forEach(x => {
                     if (x.status === 'sold') {
                         if (!reseller[l]) reseller[l] = { items: [], p: 0, rev: 0 };
@@ -330,7 +331,6 @@
                     }
                 });
 
-                // 5. Казино
                 u.diceHistory?.forEach(x => {
                     if (!casino[l]) casino[l] = { w: 0, l: 0, net: 0 };
                     if (x.result === 'win') {
@@ -342,7 +342,6 @@
                     }
                 });
 
-                // 6. Долги
                 u.debts?.forEach(x => {
                     if (!debts[l]) debts[l] = { iOwe: 0, owesMe: 0, net: 0 };
                     if (x.type === 'i_owe') {
@@ -448,19 +447,43 @@
         async function loadAllowedUsers() {
             let snap = await getDoc(doc(db, "system", "config"));
             let tbody = document.getElementById('allowed-list');
-            if (snap.exists() && tbody) {
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            if (snap.exists()) {
                 let map = snap.data().allowedUsersMap || {};
                 let arr = Object.keys(map).map(login => ({ login, expiry: map[login], diff: map[login] - Date.now() }));
                 arr.sort((a, b) => a.diff - b.diff);
-                tbody.innerHTML = arr.length === 0
-                    ? `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`
-                    : arr.map(i => `
-                        <tr>
-                            <td>${i.login}</td>
-                            <td style="color: ${i.diff > 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: bold;">${formatTime(i.diff)}</td>
-                            <td style="text-align: right;"><button type="button" class="delete-btn" onclick="removeAllowedUser('${i.login}')">✕</button></td>
-                        </tr>
-                    `).join('');
+
+                if (arr.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr>`;
+                } else {
+                    arr.forEach(i => {
+                        let tr = document.createElement('tr');
+                        let tdLogin = document.createElement('td');
+                        tdLogin.textContent = i.login;
+
+                        let tdTime = document.createElement('td');
+                        tdTime.style.color = i.diff > 0 ? 'var(--success)' : 'var(--danger)';
+                        tdTime.style.fontWeight = 'bold';
+                        tdTime.textContent = formatTime(i.diff);
+
+                        let tdAction = document.createElement('td');
+                        tdAction.style.textAlign = 'right';
+                        let btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'delete-btn';
+                        btn.textContent = '✕';
+                        btn.title = 'Забрать подписку';
+                        btn.addEventListener('click', () => removeAllowedUser(i.login));
+                        tdAction.appendChild(btn);
+
+                        tr.appendChild(tdLogin);
+                        tr.appendChild(tdTime);
+                        tr.appendChild(tdAction);
+                        tbody.appendChild(tr);
+                    });
+                }
             }
         }
 
@@ -477,14 +500,22 @@
             showToast(`Доступ для "${login}" выдан!`);
         };
 
+        // Физическое удаление ключа из карты подписок в Firestore
         window.removeAllowedUser = async function(login) {
-            let ref = doc(db, "system", "config"), snap = await getDoc(ref);
-            if (snap.exists()) {
-                let map = snap.data().allowedUsersMap || {};
-                delete map[login];
-                await setDoc(ref, { allowedUsersMap: map }, { merge: true });
-                await loadAllowedUsers();
-                showToast(`Подписка у "${login}" забрана!`, "error");
+            try {
+                let ref = doc(db, "system", "config");
+                let snap = await getDoc(ref);
+                if (snap.exists()) {
+                    let data = snap.data();
+                    let map = { ...(data.allowedUsersMap || {}) };
+                    delete map[login];
+                    await updateDoc(ref, { allowedUsersMap: map });
+                    await loadAllowedUsers();
+                    showToast(`Подписка у "${login}" успешно забрана!`, "error");
+                }
+            } catch (err) {
+                console.error("Ошибка удаления подписки:", err);
+                showToast("Ошибка при удалении подписки: " + err.message, "error");
             }
         };
 
@@ -596,7 +627,6 @@
                 isRedemption, owner: isRedemption ? owner : "",
                 startTime: Date.now(), status: "active"
             });
-            userData.resellerItems.sort((a, b) => b.buyPrice - a.buyPrice);
 
             await saveUserData();
             document.getElementById('res-name').value = "";
@@ -624,7 +654,6 @@
             item.sellPrice = sellPrice;
             item.status = "sold";
             item.soldTime = Date.now();
-            userData.resellerItems.sort((a, b) => b.buyPrice - a.buyPrice);
 
             await saveUserData();
             renderState();
@@ -787,6 +816,16 @@
             });
         }
 
+        function sortResellerArray(arr) {
+            let sortType = document.getElementById('reseller-sort')?.value || 'price_desc';
+            let copy = [...arr];
+            if (sortType === 'price_desc') copy.sort((a, b) => (b.buyPrice || 0) - (a.buyPrice || 0));
+            else if (sortType === 'price_asc') copy.sort((a, b) => (a.buyPrice || 0) - (b.buyPrice || 0));
+            else if (sortType === 'date_desc') copy.sort((a, b) => (b.startTime || b.id || 0) - (a.startTime || a.id || 0));
+            else if (sortType === 'date_asc') copy.sort((a, b) => (a.startTime || a.id || 0) - (b.startTime || b.id || 0));
+            return copy;
+        }
+
         function renderState() {
             if (userData.activeTheft) {
                 document.getElementById('active-panel').style.display = 'block';
@@ -827,9 +866,8 @@
                 }).join('');
             }
 
-            // Перекуп (сортировка от самых дорогих к дешевым)
-            let items = userData.resellerItems || [];
-            items.sort((a, b) => b.buyPrice - a.buyPrice);
+            // Перекуп с динамической сортировкой
+            let items = sortResellerArray(userData.resellerItems || []);
             let active = items.filter(i => i.status === 'active');
             let sold = items.filter(i => i.status === 'sold');
 
@@ -844,11 +882,13 @@
             aProfEl.style.color = net >= 0 ? 'var(--success)' : 'var(--danger)';
             document.getElementById('res-analyst-revenue').textContent = sold.reduce((s, i) => s + i.sellPrice, 0).toLocaleString() + ' ₽';
 
+            const formatPurchaseDate = (ts) => ts ? new Date(ts).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '--';
+
             document.getElementById('res-cabinet-active-list').innerHTML = active.length === 0
                 ? `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Активных лотов нет</td></tr>`
                 : active.map(i => `
                     <tr>
-                        <td><strong>${i.name}</strong>${i.isRedemption ? `<br><small style="color:var(--accent);">Выкуп от: ${i.owner}</small>` : ""}</td>
+                        <td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">Куплено: ${formatPurchaseDate(i.startTime || i.id)}</small>${i.isRedemption ? `<br><small style="color:var(--accent);">Выкуп от: ${i.owner}</small>` : ""}</td>
                         <td>${i.buyPrice.toLocaleString()} ₽</td>
                         <td>Активен</td>
                         <td style="text-align: right;">
@@ -862,7 +902,7 @@
                 ? `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Имущество не найдено</td></tr>`
                 : active.map(i => `
                     <tr>
-                        <td><strong>${i.name}</strong></td>
+                        <td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${formatPurchaseDate(i.startTime || i.id)}</small></td>
                         <td>${i.buyPrice.toLocaleString()} ₽</td>
                         <td>⏳ <span class="res-timer" data-start="${i.startTime}">${formatTime(Date.now() - i.startTime)}</span></td>
                         <td>Активен</td>
@@ -879,7 +919,7 @@
                     let isS = i.status === 'sold', p = isS ? (i.sellPrice - i.buyPrice) : 0, col = p >= 0 ? 'var(--success)' : 'var(--danger)';
                     return `
                         <tr>
-                            <td><strong>${i.name}</strong></td>
+                            <td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${formatPurchaseDate(i.startTime || i.id)}</small></td>
                             <td>${i.buyPrice.toLocaleString()} ₽</td>
                             <td>${isS ? `<span style="color:${col}; font-weight:bold;">Продано за ${i.sellPrice.toLocaleString()} ₽ (Прибыль: ${p.toLocaleString()} ₽)</span>` : `<span style="color:var(--accent);">В продаже</span>`}</td>
                             <td style="text-align: right;"><button class="delete-btn" onclick="deleteResellerItem(${i.id})">✕</button></td>
@@ -1001,10 +1041,21 @@
         <!-- Раздел Перекуп -->
         <div id="tab-perekup" class="tab-content active">
             <div class="sub-tabs">
-                <a href="#section-cabinet" class="sub-btn active">Мой кабинет</a>
-                <a href="#section-property" class="sub-btn">Имущество</a>
-                <a href="#section-ledger" class="sub-btn">Торговая тетрадь</a>
-                <a href="#section-analytics" class="sub-btn">Аналитика</a>
+                <div class="sub-tabs-links">
+                    <a href="#section-cabinet" class="sub-btn active">Мой кабинет</a>
+                    <a href="#section-property" class="sub-btn">Имущество</a>
+                    <a href="#section-ledger" class="sub-btn">Торговая тетрадь</a>
+                    <a href="#section-analytics" class="sub-btn">Аналитика</a>
+                </div>
+                <div class="sort-box">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Сортировка:</span>
+                    <select id="reseller-sort">
+                        <option value="price_desc">По цене: от дорогих к дешевым</option>
+                        <option value="price_asc">По цене: от дешевых к дорогим</option>
+                        <option value="date_desc">По дате покупки: сначала новые</option>
+                        <option value="date_asc">По дате покупки: сначала старые</option>
+                    </select>
+                </div>
             </div>
             <div id="section-cabinet" class="section-block">
                 <div class="stats-grid">
@@ -1020,9 +1071,9 @@
                     <button id="btn-add-reseller-item" style="margin-top: 15px;">Добавить в учет</button>
                 </div>
                 <div class="card">
-                    <h2>Активные лоты (от дорогих к дешевым)</h2>
+                    <h2>Активные лоты</h2>
                     <table>
-                        <thead><tr><th>Вещь</th><th>Покупка</th><th>Статус</th><th style="width: 140px;"></th></tr></thead>
+                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Статус</th><th style="width: 140px;"></th></tr></thead>
                         <tbody id="res-cabinet-active-list"><tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет лотов</td></tr></tbody>
                     </table>
                 </div>
@@ -1031,16 +1082,16 @@
                 <div class="card">
                     <h2>Имущество и карточки</h2>
                     <table>
-                        <thead><tr><th>Вещь</th><th>Покупка</th><th>Время</th><th>Статус</th><th style="width: 140px;"></th></tr></thead>
+                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Время</th><th>Статус</th><th style="width: 140px;"></th></tr></thead>
                         <tbody id="reseller-property-list"><tr><td colspan="5" style="text-align: center;">Пусто</td></tr></tbody>
                     </table>
                 </div>
             </div>
             <div id="section-ledger" class="section-block">
                 <div class="card">
-                    <h2>Торговая тетрадь (от дорогих к дешевым)</h2>
+                    <h2>Торговая тетрадь</h2>
                     <table>
-                        <thead><tr><th>Вещь</th><th>Покупка</th><th>Результат</th><th style="width: 40px;"></th></tr></thead>
+                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Результат</th><th style="width: 40px;"></th></tr></thead>
                         <tbody id="reseller-ledger-list"><tr><td colspan="4" style="text-align: center;">Пусто</td></tr></tbody>
                     </table>
                 </div>
@@ -1056,9 +1107,11 @@
         <!-- Раздел Фарм -->
         <div id="tab-farm" class="tab-content">
             <div class="sub-tabs">
-                <button type="button" class="sub-btn farm-sub active" data-farm-sub="theft">🚗 Угонщик</button>
-                <button type="button" class="sub-btn farm-sub" data-farm-sub="courier">📦 Закладчик</button>
-                <button type="button" class="sub-btn farm-sub" data-farm-sub="house">🏠 Ограбление домов</button>
+                <div class="sub-tabs-links">
+                    <button type="button" class="sub-btn farm-sub active" data-farm-sub="theft">🚗 Угонщик</button>
+                    <button type="button" class="sub-btn farm-sub" data-farm-sub="courier">📦 Закладчик</button>
+                    <button type="button" class="sub-btn farm-sub" data-farm-sub="house">🏠 Ограбление домов</button>
+                </div>
             </div>
 
             <!-- Подраздел: Угонщик -->
@@ -1180,7 +1233,7 @@
             </div>
         </div>
 
-        <!-- Раздел Рейтинг (Статистика с логинами по всем разделам и подразделам) -->
+        <!-- Раздел Рейтинг -->
         <div id="tab-rating" class="tab-content">
             <div class="card">
                 <h2>🚗 Рейтинг угонщиков (Фарм)</h2>
