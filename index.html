@@ -86,7 +86,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteField, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAT03HslnNWesJcagAB-dFfITaQTrz8qw8",
@@ -130,8 +130,7 @@
         }
 
         const carsByLevel = {
-            1: [], 2: [], 3: [], 4: [], 5: [],
-            6: [
+            "6": [
                 { name: "Alexis LX 570", day: 45000, night: 22500 },
                 { name: "Wulfsborg Teguan AD", day: 20700, night: 10350 },
                 { name: "Blau & Weiss M3 E46", day: 21600, night: 10800 },
@@ -143,7 +142,7 @@
                 { name: "Cornelian Corwette C7", day: 45000, night: 22500 },
                 { name: "Daimler G-Class W463", day: 53250, night: 26625 }
             ],
-            7: [
+            "7": [
                 { name: "Daimler-AMX SL R232", day: 18900, night: 13500 },
                 { name: "Ferruccio Siun", day: 65625, night: 46875 },
                 { name: "Molsheim Formula", day: 65625, night: 46875 },
@@ -199,7 +198,10 @@
             switchTab(['perekup', 'farm', 'casino', 'debts', 'rating'].includes(initialPath) ? initialPath : 'perekup', false);
 
             let levelSel = document.getElementById('level-select');
-            for (let i = 1; i <= 7; i++) levelSel.add(new Option(`${i} уровень`, i, false, i === 7));
+            levelSel.add(new Option("1-5 уровень", "1-5"));
+            levelSel.add(new Option("6 уровень", "6"));
+            levelSel.add(new Option("7 уровень", "7", true, true));
+
             levelSel.addEventListener('change', updateCarList);
             document.getElementById('car-select').addEventListener('change', updateCarInfo);
             updateCarList();
@@ -500,7 +502,6 @@
             showToast(`Доступ для "${login}" выдан!`);
         };
 
-        // Физическое удаление ключа из карты подписок в Firestore
         window.removeAllowedUser = async function(login) {
             try {
                 let ref = doc(db, "system", "config");
@@ -521,13 +522,25 @@
 
         function updateCarList() {
             let level = document.getElementById('level-select').value;
-            let cars = [...(carsByLevel[level] || [])].sort((a, b) => a.name.localeCompare(b.name));
+            let carBox = document.getElementById('car-select-box');
+            let customBox = document.getElementById('custom-price-box');
             let sel = document.getElementById('car-select');
-            sel.innerHTML = '';
-            document.getElementById('btn-start').disabled = cars.length === 0;
-            if (cars.length === 0) sel.add(new Option("Машины для этого уровня не добавлены", ""));
-            else cars.forEach(c => sel.add(new Option(c.name, c.name)));
-            updateCarInfo();
+            let info = document.getElementById('selected-car-info');
+
+            if (level === '1-5') {
+                carBox.style.display = 'none';
+                customBox.style.display = 'block';
+                info.textContent = '';
+                document.getElementById('btn-start').disabled = false;
+            } else {
+                carBox.style.display = 'block';
+                customBox.style.display = 'none';
+                let cars = [...(carsByLevel[level] || [])].sort((a, b) => a.name.localeCompare(b.name));
+                sel.innerHTML = '';
+                document.getElementById('btn-start').disabled = cars.length === 0;
+                cars.forEach(c => sel.add(new Option(c.name, c.name)));
+                updateCarInfo();
+            }
         }
 
         function getSelectedCar() {
@@ -537,8 +550,13 @@
         }
 
         function updateCarInfo() {
-            let car = getSelectedCar(), info = document.getElementById('selected-car-info');
-            if (!info) return;
+            let lvl = document.getElementById('level-select').value;
+            let info = document.getElementById('selected-car-info');
+            if (!info || lvl === '1-5') {
+                if (info) info.textContent = "";
+                return;
+            }
+            let car = getSelectedCar();
             if (!car) { info.textContent = ""; return; }
             let now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
             let night = mins >= 60 && mins < 540;
@@ -753,26 +771,59 @@
 
         // Угонщик
         async function startTheft() {
-            let car = getSelectedCar();
-            if (!car) return;
-            userData.activeTheft = { level: document.getElementById('level-select').value, carName: car.name, startTime: Date.now() };
+            let level = document.getElementById('level-select').value;
+            if (level === '1-5') {
+                let customPrice = getCleanNumber('custom-theft-price');
+                if (customPrice <= 0) {
+                    showToast("Введите стоимость за авто!", "error");
+                    return;
+                }
+                userData.activeTheft = {
+                    level: '1-5',
+                    carName: `Авто (1-5 ур.)`,
+                    customPrice: customPrice,
+                    startTime: Date.now()
+                };
+                document.getElementById('custom-theft-price').value = "";
+            } else {
+                let car = getSelectedCar();
+                if (!car) return;
+                userData.activeTheft = {
+                    level: level,
+                    carName: car.name,
+                    startTime: Date.now()
+                };
+            }
             await saveUserData();
             renderState();
-            showToast(`Угон начат: ${car.name}`);
+            showToast(`Угон начат: ${userData.activeTheft.carName}`);
         }
 
         async function finishTheft() {
             if (!userData.activeTheft) return;
             let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
-            let car = carsByLevel[userData.activeTheft.level].find(c => c.name === userData.activeTheft.carName);
             let now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
             let night = mins >= 60 && mins < 540;
-            let price = night ? car.night : car.day;
+
+            let price = 0;
+            let name = userData.activeTheft.carName;
+            let level = userData.activeTheft.level;
+
+            if (level === '1-5' || userData.activeTheft.customPrice) {
+                price = userData.activeTheft.customPrice || 0;
+            } else {
+                let car = carsByLevel[level]?.find(c => c.name === name);
+                price = car ? (night ? car.night : car.day) : 0;
+            }
+
             userData.history.unshift({
-                name: car.name, level: userData.activeTheft.level,
+                name: name,
+                level: level,
                 time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                 duration: `${Math.floor(sec / 60)} мин ${sec % 60} сек`,
-                price, date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }), status: 'success'
+                price: price,
+                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }),
+                status: 'success'
             });
             userData.activeTheft = null;
             await saveUserData();
@@ -830,7 +881,8 @@
             if (userData.activeTheft) {
                 document.getElementById('active-panel').style.display = 'block';
                 document.getElementById('start-panel').style.display = 'none';
-                document.getElementById('active-car-name').textContent = `${userData.activeTheft.carName} (${userData.activeTheft.level} ур.)`;
+                let priceInfo = userData.activeTheft.customPrice ? ` — ${userData.activeTheft.customPrice.toLocaleString()} ₽` : ` (${userData.activeTheft.level} ур.)`;
+                document.getElementById('active-car-name').textContent = `${userData.activeTheft.carName}${priceInfo}`;
                 updateTimers();
             } else {
                 document.getElementById('active-panel').style.display = 'none';
@@ -858,9 +910,10 @@
                     let rows = `<tr class="day-header"><td colspan="5">📅 ${day} | Успешных: ${daySucc.length} | Заработано: ${dayEarned.toLocaleString()} ₽</td></tr>`;
                     rows += grouped[day].map(g => {
                         let i = g.item;
+                        let title = i.name.includes('ур.') ? i.name : `${i.name} (${i.level} ур.)`;
                         return i.status === 'caught'
-                            ? `<tr class="caught-row"><td>${i.name} (${i.level} ур.)</td><td>${i.time}</td><td>${i.duration}</td><td>Поймали менты (0 ₽)</td><td style="text-align: right;"><button class="delete-btn" onclick="deleteHistoryItem(${g.globalIndex})">✕</button></td></tr>`
-                            : `<tr><td>${i.name} (${i.level} ур.)</td><td>${i.time}</td><td>${i.duration}</td><td>${i.price.toLocaleString()} ₽</td><td style="text-align: right;"><button class="delete-btn" onclick="deleteHistoryItem(${g.globalIndex})">✕</button></td></tr>`;
+                            ? `<tr class="caught-row"><td>${title}</td><td>${i.time}</td><td>${i.duration}</td><td>Поймали менты (0 ₽)</td><td style="text-align: right;"><button class="delete-btn" onclick="deleteHistoryItem(${g.globalIndex})">✕</button></td></tr>`
+                            : `<tr><td>${title}</td><td>${i.time}</td><td>${i.duration}</td><td>${i.price.toLocaleString()} ₽</td><td style="text-align: right;"><button class="delete-btn" onclick="deleteHistoryItem(${g.globalIndex})">✕</button></td></tr>`;
                     }).join('');
                     return rows;
                 }).join('');
@@ -1132,8 +1185,19 @@
                 </div>
                 <div class="card" id="start-panel">
                     <h2>Начать новый угон</h2>
-                    <label>Выберите уровень:</label><select id="level-select"></select>
-                    <label style="margin-top: 15px; display: block;">Выберите автомобиль:</label><select id="car-select"></select>
+                    <label>Выберите уровень:</label>
+                    <select id="level-select"></select>
+
+                    <div id="car-select-box">
+                        <label style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
+                        <select id="car-select"></select>
+                    </div>
+
+                    <div id="custom-price-box" style="display:none;">
+                        <label style="margin-top: 15px; display: block;">Стоимость за авто (₽):</label>
+                        <input type="text" id="custom-theft-price" placeholder="Например, 15 000" oninput="formatMoneyInput(this)">
+                    </div>
+
                     <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
                     <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
                 </div>
