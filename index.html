@@ -181,7 +181,7 @@
                 diceBet: 0
             },
             wheelBonuses: [20, 25, 30, 35],
-            customSections: [], // Кастомные разделы и подразделы, созданные админом
+            customSections: [],
             theftLevels: {
                 "1-6": { name: "1-6 уровень", mode: "custom", cars: [] },
                 "7": {
@@ -205,16 +205,31 @@
         let currentUser = null, currentLogin = "";
         let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
         let allUsersCache = [];
+        let globalLogsCache = [];
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
+        // Надежное сохранение лога и в профиль пользователя, и в общий документ system/logs
         async function logAction(action, details = "") {
-            if (!currentUser) return;
+            if (!currentUser || !currentLogin) return;
             if (!userData.activityLogs) userData.activityLogs = [];
             let { date, time } = getMskNow();
-            userData.activityLogs.unshift({ id: Date.now() + Math.random(), date, time, action, details });
-            if (userData.activityLogs.length > 150) userData.activityLogs.length = 150;
-            try { await setDoc(doc(db, "users", currentUser.uid), { login: currentLogin, activityLogs: userData.activityLogs }, { merge: true }); }
-            catch (e) { console.error(e); }
+            let entry = { id: Date.now() + Math.floor(Math.random() * 1000), login: currentLogin, date, time, action, details };
+
+            userData.activityLogs.unshift(entry);
+            if (userData.activityLogs.length > 200) userData.activityLogs.length = 200;
+
+            try {
+                await setDoc(doc(db, "users", currentUser.uid), { login: currentLogin, activityLogs: userData.activityLogs }, { merge: true });
+            } catch (e) { console.error(e); }
+
+            try {
+                let gRef = doc(db, "system", "logs");
+                let gSnap = await getDoc(gRef);
+                let gEntries = gSnap.exists() ? (gSnap.data().entries || []) : [];
+                gEntries.unshift(entry);
+                if (gEntries.length > 500) gEntries.length = 500;
+                await setDoc(gRef, { entries: gEntries }, { merge: true });
+            } catch (e) { /* Игнорируем, если нет доступа к system/logs */ }
         }
 
         async function loadSiteConfig() {
@@ -279,7 +294,6 @@
                 if (blockId && $(blockId)) $(blockId).style.display = vis === false ? 'none' : '';
             });
 
-            // Тексты кнопок действий
             const btnMap = {
                 'btn-add-reseller-item': L.btnAddReseller,
                 'btn-start': L.btnStartTheft,
@@ -292,13 +306,11 @@
             };
             Object.entries(btnMap).forEach(([id, txt]) => { if ($(id) && txt) $(id).textContent = txt; });
 
-            // Дефолтные цены в полях ввода
             if (D.courierPrice > 0 && !$('courier-price').value) $('courier-price').value = fmt(D.courierPrice);
             if (D.houseAmount > 0 && !$('house-amount').value) $('house-amount').value = fmt(D.houseAmount);
             if (D.lowLevelTheftPrice > 0 && !$('custom-theft-price').value) $('custom-theft-price').value = fmt(D.lowLevelTheftPrice);
             if (D.diceBet > 0 && !$('dice-amount').value) $('dice-amount').value = fmt(D.diceBet);
 
-            // Бонусы колеса
             let bSel = $('wheel-bonus-select');
             if (bSel) {
                 let curB = bSel.value;
@@ -307,7 +319,6 @@
                 if (curB && siteConfig.wheelBonuses.includes(Number(curB))) bSel.value = curB;
             }
 
-            // Уровни угона
             let levelSel = $('level-select'), prevLvl = levelSel.value;
             levelSel.innerHTML = '';
             Object.keys(siteConfig.theftLevels).forEach(k => levelSel.add(new Option(siteConfig.theftLevels[k].name, k)));
@@ -320,7 +331,6 @@
             if (currentLogin === ADMIN_LOGIN) renderAdminEditor();
         }
 
-        // Генерация кастомных вкладок, подразделов фарма и таблиц рейтинга, созданных админом
         function renderDynamicCustomSections() {
             document.querySelectorAll('.dyn-generated').forEach(el => el.remove());
 
@@ -405,7 +415,6 @@
                     mainContainer.insertBefore(tabDiv, ratingTab);
                 }
 
-                // Карточка в Рейтинге
                 let rCard = document.createElement('div');
                 rCard.className = 'card dyn-generated';
                 rCard.innerHTML = `
@@ -480,10 +489,15 @@
 
             $('level-select').addEventListener('change', () => { updateCarList(); logAction("Выбран уровень угона", $('level-select').value); });
             $('car-select').addEventListener('change', () => { updateCarInfo(); logAction("Выбран авто в списке", $('car-select').value); });
-            $('wheel-bonus-select').addEventListener('change', updateCarInfo);
+            $('wheel-bonus-select').addEventListener('change', () => { updateCarInfo(); logAction("Выбран процент бонуса колеса", `+${$('wheel-bonus-select').value}%`); });
             $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
             $('admin-level-picker').addEventListener('change', renderAdminCarsList);
             $('admin-log-user-filter').addEventListener('change', renderAdminLogs);
+
+            // Автоматический трекер кликов по внутренним ссылкам подразделов Перекупа
+            document.querySelectorAll('#tab-perekup .sub-btn').forEach(a => {
+                a.addEventListener('click', () => logAction("Переход в подраздел Перекупа", a.textContent.trim()));
+            });
 
             const clicks = {
                 'btn-login': () => authAction(false),
@@ -527,14 +541,15 @@
                     $('user-login').textContent = currentLogin;
                     $('nav-admin').style.display = currentLogin === ADMIN_LOGIN ? 'block' : 'none';
 
+                    // Сначала загружаем данные пользователя, чтобы не затереть его старые логи!
+                    await loadUserData();
                     await loadSiteConfig();
                     if (currentLogin === ADMIN_LOGIN) await loadAllowedUsers();
                     if (!subInterval) subInterval = setInterval(() => { updateSub(); updateTimers(); }, 1000);
                     updateSub();
-                    await loadUserData();
-                    await logAction("Вход на сайт", "Сессия открыта");
+                    await logAction("Вход на сайт", "Открыта рабочая сессия");
                     await loadGlobalRatings();
-                    if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 300000);
+                    if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
                 } else {
                     currentUser = null; currentLogin = "";
                     if (subInterval) { clearInterval(subInterval); subInterval = null; }
@@ -558,8 +573,19 @@
         async function loadGlobalRatings() {
             try {
                 let snap = await getDocs(collection(db, "users")), all = [];
-                snap.forEach(d => all.push({ uid: d.id, ...d.data() }));
+                snap.forEach(d => {
+                    let data = d.data();
+                    // Если у старого документа не было поля login, определяем его или помечаем по ID
+                    let resolvedLogin = data.login || (data.email ? data.email.split('@')[0] : `user_${d.id.slice(0, 5)}`);
+                    all.push({ uid: d.id, ...data, login: resolvedLogin });
+                });
                 allUsersCache = all;
+
+                try {
+                    let gSnap = await getDoc(doc(db, "system", "logs"));
+                    globalLogsCache = gSnap.exists() ? (gSnap.data().entries || []) : [];
+                } catch (e) { globalLogsCache = []; }
+
                 renderRatings(all);
                 if (currentLogin === ADMIN_LOGIN) renderAdminLogs();
             } catch (err) { console.error(err); }
@@ -842,21 +868,114 @@
             await saveSiteConfigToDb("Все кнопки, разделы, видимость и цены сохранены!");
         }
 
+        // Полная сборка логов всех игроков (включая глобальный лог, личные логи и историю операций каждого аккаунта)
         function renderAdminLogs() {
             let filterSel = $('admin-log-user-filter'), prevUser = filterSel.value;
-            filterSel.innerHTML = `<option value="all">Все пользователи</option>`;
+            filterSel.innerHTML = `<option value="all">Все пользователи (${allUsersCache.length})</option>`;
+
             let logins = allUsersCache.map(u => u.login).filter(Boolean).sort();
             [...new Set(logins)].forEach(l => filterSel.add(new Option(l, l)));
             if (prevUser && (prevUser === 'all' || logins.includes(prevUser))) filterSel.value = prevUser;
 
-            let selected = filterSel.value, logs = [];
-            allUsersCache.forEach(u => {
-                if (!u.login || (selected !== 'all' && u.login !== selected)) return;
-                (u.activityLogs || []).forEach(entry => logs.push({ login: u.login, ...entry }));
-            });
-            logs.sort((a, b) => (b.id || 0) - (a.id || 0));
+            let selected = filterSel.value;
+            let combined = [];
+            let seenKeys = new Set();
 
-            renderList('admin-logs-list', logs.slice(0, 200), "Логов действий пока нет", 4, l => `
+            const pushUnique = (login, id, date, time, action, details) => {
+                if (!login || (selected !== 'all' && login !== selected)) return;
+                let key = `${login}_${date}_${time}_${action}_${details}`;
+                if (seenKeys.has(key)) return;
+                seenKeys.add(key);
+                combined.push({ login, id: id || 0, date: date || '—', time: time || '—', action, details });
+            };
+
+            // 1. Записи из глобального журнала system/logs
+            (globalLogsCache || []).forEach(g => pushUnique(g.login, g.id, g.date, g.time, g.action, g.details));
+
+            // 2. Записи из профилей всех пользователей + реконструкция действий из их истории
+            allUsersCache.forEach(u => {
+                let l = u.login;
+                if (!l || (selected !== 'all' && l !== selected)) return;
+
+                // Прямые логи активности
+                (u.activityLogs || []).forEach(entry => {
+                    pushUnique(l, entry.id, entry.date, entry.time, entry.action, entry.details);
+                });
+
+                // Активный угон в данный момент
+                if (u.activeTheft) {
+                    let stDate = new Date(u.activeTheft.startTime);
+                    pushUnique(
+                        l,
+                        u.activeTheft.startTime,
+                        stDate.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }),
+                        stDate.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+                        "🚨 В процессе угона",
+                        `${u.activeTheft.carName} (${u.activeTheft.level} ур.)`
+                    );
+                }
+
+                // Реконструкция из истории угонов
+                (u.history || []).forEach((h, i) => {
+                    pushUnique(
+                        l,
+                        h.id || (1700000000000 - i * 1000),
+                        h.date,
+                        h.time,
+                        h.status === 'caught' ? "🚓 Провал угона (полиция)" : "🚗 Сдача авто (Угонщик)",
+                        `${h.name}: ${h.status === 'caught' ? '0 ₽' : '+' + fmt(h.price) + ' ₽'} (${h.duration || '—'})`
+                    );
+                });
+
+                // Реконструкция из Перекупа
+                (u.resellerItems || []).forEach(r => {
+                    let buyD = r.startTime ? new Date(r.startTime) : null;
+                    pushUnique(
+                        l,
+                        r.startTime || r.id,
+                        buyD ? buyD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
+                        buyD ? buyD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—',
+                        "📈 Покупка вещи (Перекуп)",
+                        `${r.name} за ${fmt(r.buyPrice)} ₽`
+                    );
+                    if (r.status === 'sold') {
+                        let sellD = r.soldTime ? new Date(r.soldTime) : null;
+                        let p = (r.sellPrice || 0) - (r.buyPrice || 0);
+                        pushUnique(
+                            l,
+                            r.soldTime || (r.id + 1),
+                            sellD ? sellD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
+                            sellD ? sellD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—',
+                            "💰 Продажа вещи (Перекуп)",
+                            `${r.name}: продано за ${fmt(r.sellPrice)} ₽ (прибыль: ${fmt(p)} ₽)`
+                        );
+                    }
+                });
+
+                // Реконструкция из Закладок
+                (u.courierHistory || []).forEach(c => {
+                    pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽`);
+                });
+
+                // Реконструкция из Ограбления домов
+                (u.houseHistory || []).forEach(h => {
+                    pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽`);
+                });
+
+                // Реконструкция из Казино
+                (u.diceHistory || []).forEach(d => {
+                    pushUnique(l, d.id, d.date, d.time, "🎲 Игра в кости (Казино)", `${d.result === 'win' ? 'Победа +' : 'Проигрыш -'}${fmt(d.amount)} ₽`);
+                });
+
+                // Реконструкция из Долгов
+                (u.debts || []).forEach(d => {
+                    pushUnique(l, d.id, d.date, d.time, "💸 Запись о долге", `${d.person}: ${fmt(d.amount)} ₽ (${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'})`);
+                });
+            });
+
+            combined.sort((a, b) => (b.id || 0) - (a.id || 0));
+
+            renderList('admin-logs-list', combined.slice(0, 300), "Логов действий для выбранного фильтра пока нет", 4, l => `
                 <tr>
                     <td style="white-space:nowrap;color:var(--text-muted);">${l.date} ${l.time}</td>
                     <td><strong style="color:var(--accent);">${l.login}</strong></td>
@@ -868,15 +987,18 @@
 
         async function adminClearSelectedUserLogs() {
             let selected = $('admin-log-user-filter').value;
-            if (!confirm(`Очистить логи (${selected === 'all' ? 'всех игроков' : selected})?`)) return;
+            if (!confirm(`Очистить журнал кликов (${selected === 'all' ? 'всех игроков' : selected})?`)) return;
             for (let u of allUsersCache) {
                 if (selected === 'all' || u.login === selected) {
                     if (u.uid) await updateDoc(doc(db, "users", u.uid), { activityLogs: [] });
                 }
             }
+            if (selected === 'all') {
+                try { await setDoc(doc(db, "system", "logs"), { entries: [] }); } catch (e) {}
+            }
             if (selected === 'all' || selected === currentLogin) userData.activityLogs = [];
             await loadGlobalRatings();
-            showToast("Логи очищены!");
+            showToast("Журнал кликов очищен!");
         }
         // ===============================================================
 
@@ -939,6 +1061,7 @@
             }
             $('wheel-bonus-select-box').style.display = cb.checked ? 'block' : 'none';
             updateCarInfo();
+            logAction("Переключен бонус колеса казино", cb.checked ? "Включен" : "Выключен");
         };
 
         window.toggleCustomPrice = function(cb) {
@@ -948,6 +1071,7 @@
             }
             $('custom-price-box').style.display = cb.checked ? 'block' : 'none';
             updateCarInfo();
+            logAction("Переключен ввод своей цены (Угон)", cb.checked ? "Включен" : "Выключен");
         };
 
         const getCurrentLevelObj = () => siteConfig.theftLevels[$('level-select').value] || { mode: 'custom', cars: [] };
@@ -1034,11 +1158,7 @@
         }
 
         async function commitChange(msg, type = 'success', refreshRatings = true, logTitle = "", logDetails = "") {
-            if (logTitle) {
-                let { date, time } = getMskNow();
-                userData.activityLogs.unshift({ id: Date.now() + Math.random(), date, time, action: logTitle, details: logDetails });
-                if (userData.activityLogs.length > 150) userData.activityLogs.length = 150;
-            }
+            if (logTitle) await logAction(logTitle, logDetails);
             await saveUserData();
             renderState();
             if (refreshRatings) await loadGlobalRatings();
@@ -1150,7 +1270,7 @@
             let { shortTime: time, date } = getMskNow();
 
             if (caught) {
-                userData.history.unshift({ name, level, duration, price: 0, status: 'caught', time, date });
+                userData.history.unshift({ id: Date.now(), name, level, duration, price: 0, status: 'caught', time, date });
                 userData.activeTheft = null;
                 return commitChange("Поймали менты (0 ₽)", "error", false, "Провал угона (полиция)", `${name} (${duration})`);
             }
@@ -1161,7 +1281,7 @@
                 : Math.round(((lvlCars.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0) * (1 + bonusPct / 100));
 
             let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice && siteConfig.theftLevels[level]?.mode === 'list' ? `${name} (своя цена)` : name);
-            userData.history.unshift({ name: displayCarName, level, duration, price, status: 'success', time, date });
+            userData.history.unshift({ id: Date.now(), name: displayCarName, level, duration, price, status: 'success', time, date });
             userData.activeTheft = null;
             await commitChange(`Авто сдано! +${fmt(price)} ₽`, "success", true, "Успешная сдача угона", `${displayCarName}: +${fmt(price)} ₽ (${duration})`);
         }
@@ -1277,7 +1397,6 @@
                 <tr><td>${d.date} ${d.time}</td><td><strong>${d.person}</strong></td><td style="font-weight:bold;">${fmt(d.amount)} ₽</td><td><span style="color:${d.type === 'i_owe' ? 'var(--danger)' : 'var(--success)'};font-weight:bold;">${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'}</span></td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('debts', ${d.id})">✕</button></td></tr>
             `);
 
-            // Рендер данных кастомных разделов
             (siteConfig.customSections || []).forEach(sec => {
                 let recs = userData.customRecords?.[sec.id] || [];
                 let todayRecs = recs.filter(r => (r.date || today) === today);
@@ -1496,16 +1615,16 @@
             <!-- Админ 4: Логи действий пользователей -->
             <div id="admin-sub-logs" class="admin-content">
                 <div class="card admin-card">
-                    <h2>📋 Логи действий всех пользователей</h2>
+                    <h2>📋 Логи действий и операций всех пользователей</h2>
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                         <select id="admin-log-user-filter" style="flex:1; margin-top:0;">
                             <option value="all">Все пользователи</option>
                         </select>
                         <button type="button" id="btn-admin-refresh-logs" class="secondary" style="width:auto; margin-top:0;">🔄 Обновить</button>
-                        <button type="button" id="btn-admin-clear-logs" class="danger" style="width:auto; margin-top:0;">🧹 Очистить логи</button>
+                        <button type="button" id="btn-admin-clear-logs" class="danger" style="width:auto; margin-top:0;">🧹 Очистить журнал кликов</button>
                     </div>
                     <table>
-                        <thead><tr><th style="width:140px;">Дата / Время</th><th style="width:120px;">Игрок</th><th>Действие / Клик</th><th>Подробности</th></tr></thead>
+                        <thead><tr><th style="width:140px;">Дата / Время</th><th style="width:120px;">Игрок</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
                         <tbody id="admin-logs-list"><tr><td colspan="4" style="text-align:center;">Загрузка логов...</td></tr></tbody>
                     </table>
                 </div>
