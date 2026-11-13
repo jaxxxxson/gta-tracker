@@ -56,6 +56,7 @@
         input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
         button { background: var(--gold-gradient); color: #000; font-weight: 700; cursor: pointer; border: none; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3); transition: 0.2s; }
         button:hover { transform: translateY(-1px); }
+        button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
         button.danger { background: linear-gradient(135deg, #f87171 0%, #dc2626 100%); color: #fff; }
         button.secondary { background: rgba(55, 65, 81, 0.8); color: #fff; border: 1px solid var(--card-border); box-shadow: none; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
@@ -81,6 +82,18 @@
         .ctrl-row { display: flex; align-items: center; gap: 10px; background: rgba(3, 7, 18, 0.45); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); margin-top: 8px; }
         .ctrl-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--accent); }
         .ctrl-row input[type="text"] { margin-top: 0; flex: 1; padding: 9px 12px; }
+        /* Компактное окно логов со скроллом и фильтрами */
+        .logs-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .logs-toolbar select, .logs-toolbar input { margin-top: 0; padding: 10px 12px; font-size: 0.9rem; }
+        .logs-scroll-box { max-height: 500px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 14px; background: rgba(3, 7, 18, 0.55); }
+        .logs-scroll-box table { margin-top: 0; }
+        .logs-scroll-box thead th { position: sticky; top: 0; background: #0b1120; z-index: 2; box-shadow: 0 1px 0 var(--card-border); }
+        .logs-scroll-box::-webkit-scrollbar { width: 8px; }
+        .logs-scroll-box::-webkit-scrollbar-track { background: rgba(3, 7, 18, 0.4); border-radius: 8px; }
+        .logs-scroll-box::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.45); border-radius: 8px; }
+        .logs-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-muted); }
+        .logs-pagination .page-btns { display: flex; gap: 8px; align-items: center; }
+        .logs-pagination button { width: auto; margin-top: 0; padding: 8px 14px; font-size: 0.88rem; }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -206,14 +219,14 @@
         let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
         let allUsersCache = [];
         let globalLogsCache = [];
+        let adminLogsPage = 1;
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
-        // Надежное сохранение лога и в профиль пользователя, и в общий документ system/logs
         async function logAction(action, details = "") {
             if (!currentUser || !currentLogin) return;
             if (!userData.activityLogs) userData.activityLogs = [];
             let { date, time } = getMskNow();
-            let entry = { id: Date.now() + Math.floor(Math.random() * 1000), login: currentLogin, date, time, action, details };
+            let entry = { id: Date.now(), login: currentLogin, date, time, action, details };
 
             userData.activityLogs.unshift(entry);
             if (userData.activityLogs.length > 200) userData.activityLogs.length = 200;
@@ -229,7 +242,7 @@
                 gEntries.unshift(entry);
                 if (gEntries.length > 500) gEntries.length = 500;
                 await setDoc(gRef, { entries: gEntries }, { merge: true });
-            } catch (e) { /* Игнорируем, если нет доступа к system/logs */ }
+            } catch (e) {}
         }
 
         async function loadSiteConfig() {
@@ -492,9 +505,15 @@
             $('wheel-bonus-select').addEventListener('change', () => { updateCarInfo(); logAction("Выбран процент бонуса колеса", `+${$('wheel-bonus-select').value}%`); });
             $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
             $('admin-level-picker').addEventListener('change', renderAdminCarsList);
-            $('admin-log-user-filter').addEventListener('change', renderAdminLogs);
 
-            // Автоматический трекер кликов по внутренним ссылкам подразделов Перекупа
+            // Фильтры и сортировка логов
+            ['admin-log-user-filter', 'admin-log-type-filter', 'admin-log-sort', 'admin-log-limit'].forEach(id => {
+                $(id)?.addEventListener('change', () => { adminLogsPage = 1; renderAdminLogs(); });
+            });
+            $('admin-log-search')?.addEventListener('input', () => { adminLogsPage = 1; renderAdminLogs(); });
+            $('btn-logs-prev')?.addEventListener('click', () => { if (adminLogsPage > 1) { adminLogsPage--; renderAdminLogs(); } });
+            $('btn-logs-next')?.addEventListener('click', () => { adminLogsPage++; renderAdminLogs(); });
+
             document.querySelectorAll('#tab-perekup .sub-btn').forEach(a => {
                 a.addEventListener('click', () => logAction("Переход в подраздел Перекупа", a.textContent.trim()));
             });
@@ -541,7 +560,6 @@
                     $('user-login').textContent = currentLogin;
                     $('nav-admin').style.display = currentLogin === ADMIN_LOGIN ? 'block' : 'none';
 
-                    // Сначала загружаем данные пользователя, чтобы не затереть его старые логи!
                     await loadUserData();
                     await loadSiteConfig();
                     if (currentLogin === ADMIN_LOGIN) await loadAllowedUsers();
@@ -575,7 +593,6 @@
                 let snap = await getDocs(collection(db, "users")), all = [];
                 snap.forEach(d => {
                     let data = d.data();
-                    // Если у старого документа не было поля login, определяем его или помечаем по ID
                     let resolvedLogin = data.login || (data.email ? data.email.split('@')[0] : `user_${d.id.slice(0, 5)}`);
                     all.push({ uid: d.id, ...data, login: resolvedLogin });
                 });
@@ -868,119 +885,165 @@
             await saveSiteConfigToDb("Все кнопки, разделы, видимость и цены сохранены!");
         }
 
-        // Полная сборка логов всех игроков (включая глобальный лог, личные логи и историю операций каждого аккаунта)
+        // Парсер русской даты и времени в миллисекунды для точной хронологической сортировки
+        function parseRuDateTime(dateStr, timeStr, fallbackId = 0) {
+            if (fallbackId && fallbackId > 1600000000000 && fallbackId < 2500000000000) return fallbackId;
+            if (!dateStr || dateStr === '—') return fallbackId || 0;
+            let parts = dateStr.split('.');
+            if (parts.length !== 3) return fallbackId || 0;
+            let tParts = (timeStr && timeStr !== '—') ? timeStr.split(':') : ['00', '00', '00'];
+            let dt = new Date(
+                parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]),
+                parseInt(tParts[0] || 0), parseInt(tParts[1] || 0), parseInt(tParts[2] || 0)
+            );
+            return dt.getTime() || fallbackId || 0;
+        }
+
+        // Определение категории лога для удобной фильтрации
+        function getLogCategory(action = "") {
+            let a = action.toLowerCase();
+            if (a.includes('угон') || a.includes('авто')) return 'theft';
+            if (a.includes('перекуп') || a.includes('лот') || a.includes('вещ')) return 'perekup';
+            if (a.includes('заклад') || a.includes('дом') || a.includes('csec_')) return 'farm_other';
+            if (a.includes('казино') || a.includes('кости')) return 'casino';
+            if (a.includes('долг')) return 'debts';
+            return 'nav'; // Переходы по вкладкам, входы, клики
+        }
+
         function renderAdminLogs() {
             let filterSel = $('admin-log-user-filter'), prevUser = filterSel.value;
-            filterSel.innerHTML = `<option value="all">Все пользователи (${allUsersCache.length})</option>`;
+            filterSel.innerHTML = `<option value="all">👤 Все игроки (${allUsersCache.length})</option>`;
 
             let logins = allUsersCache.map(u => u.login).filter(Boolean).sort();
             [...new Set(logins)].forEach(l => filterSel.add(new Option(l, l)));
             if (prevUser && (prevUser === 'all' || logins.includes(prevUser))) filterSel.value = prevUser;
 
-            let selected = filterSel.value;
+            let selectedUser = filterSel.value;
+            let selectedType = $('admin-log-type-filter')?.value || 'all';
+            let sortOrder = $('admin-log-sort')?.value || 'time_desc';
+            let pageSize = parseInt($('admin-log-limit')?.value) || 30;
+            let searchQuery = ($('admin-log-search')?.value || '').trim().toLowerCase();
+
             let combined = [];
             let seenKeys = new Set();
 
-            const pushUnique = (login, id, date, time, action, details) => {
-                if (!login || (selected !== 'all' && login !== selected)) return;
+            const pushUnique = (login, rawId, date, time, action, details, catOverride = "") => {
+                if (!login || (selectedUser !== 'all' && login !== selectedUser)) return;
+                let cat = catOverride || getLogCategory(action);
+
+                if (selectedType === 'operations' && cat === 'nav') return;
+                if (selectedType !== 'all' && selectedType !== 'operations' && cat !== selectedType) return;
+
+                if (searchQuery) {
+                    let hay = `${login} ${date} ${time} ${action} ${details}`.toLowerCase();
+                    if (!hay.includes(searchQuery)) return;
+                }
+
                 let key = `${login}_${date}_${time}_${action}_${details}`;
                 if (seenKeys.has(key)) return;
                 seenKeys.add(key);
-                combined.push({ login, id: id || 0, date: date || '—', time: time || '—', action, details });
+
+                let ts = parseRuDateTime(date, time, rawId);
+                combined.push({ login, ts, date: date || '—', time: time || '—', action, details, cat });
             };
 
-            // 1. Записи из глобального журнала system/logs
             (globalLogsCache || []).forEach(g => pushUnique(g.login, g.id, g.date, g.time, g.action, g.details));
 
-            // 2. Записи из профилей всех пользователей + реконструкция действий из их истории
             allUsersCache.forEach(u => {
                 let l = u.login;
-                if (!l || (selected !== 'all' && l !== selected)) return;
+                if (!l || (selectedUser !== 'all' && l !== selectedUser)) return;
 
-                // Прямые логи активности
                 (u.activityLogs || []).forEach(entry => {
                     pushUnique(l, entry.id, entry.date, entry.time, entry.action, entry.details);
                 });
 
-                // Активный угон в данный момент
                 if (u.activeTheft) {
                     let stDate = new Date(u.activeTheft.startTime);
                     pushUnique(
-                        l,
-                        u.activeTheft.startTime,
+                        l, u.activeTheft.startTime,
                         stDate.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }),
                         stDate.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                         "🚨 В процессе угона",
-                        `${u.activeTheft.carName} (${u.activeTheft.level} ур.)`
+                        `${u.activeTheft.carName} (${u.activeTheft.level} ур.)`,
+                        'theft'
                     );
                 }
 
-                // Реконструкция из истории угонов
                 (u.history || []).forEach((h, i) => {
                     pushUnique(
-                        l,
-                        h.id || (1700000000000 - i * 1000),
-                        h.date,
-                        h.time,
+                        l, h.id || 0, h.date, h.time,
                         h.status === 'caught' ? "🚓 Провал угона (полиция)" : "🚗 Сдача авто (Угонщик)",
-                        `${h.name}: ${h.status === 'caught' ? '0 ₽' : '+' + fmt(h.price) + ' ₽'} (${h.duration || '—'})`
+                        `${h.name}: ${h.status === 'caught' ? '0 ₽' : '+' + fmt(h.price) + ' ₽'} (${h.duration || '—'})`,
+                        'theft'
                     );
                 });
 
-                // Реконструкция из Перекупа
                 (u.resellerItems || []).forEach(r => {
                     let buyD = r.startTime ? new Date(r.startTime) : null;
                     pushUnique(
-                        l,
-                        r.startTime || r.id,
+                        l, r.startTime || r.id,
                         buyD ? buyD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
                         buyD ? buyD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—',
                         "📈 Покупка вещи (Перекуп)",
-                        `${r.name} за ${fmt(r.buyPrice)} ₽`
+                        `${r.name} за ${fmt(r.buyPrice)} ₽`,
+                        'perekup'
                     );
                     if (r.status === 'sold') {
                         let sellD = r.soldTime ? new Date(r.soldTime) : null;
                         let p = (r.sellPrice || 0) - (r.buyPrice || 0);
                         pushUnique(
-                            l,
-                            r.soldTime || (r.id + 1),
+                            l, r.soldTime || (r.id + 1),
                             sellD ? sellD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
                             sellD ? sellD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—',
                             "💰 Продажа вещи (Перекуп)",
-                            `${r.name}: продано за ${fmt(r.sellPrice)} ₽ (прибыль: ${fmt(p)} ₽)`
+                            `${r.name}: продано за ${fmt(r.sellPrice)} ₽ (прибыль: ${fmt(p)} ₽)`,
+                            'perekup'
                         );
                     }
                 });
 
-                // Реконструкция из Закладок
                 (u.courierHistory || []).forEach(c => {
-                    pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽`);
+                    pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽`, 'farm_other');
                 });
 
-                // Реконструкция из Ограбления домов
                 (u.houseHistory || []).forEach(h => {
-                    pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽`);
+                    pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽`, 'farm_other');
                 });
 
-                // Реконструкция из Казино
                 (u.diceHistory || []).forEach(d => {
-                    pushUnique(l, d.id, d.date, d.time, "🎲 Игра в кости (Казино)", `${d.result === 'win' ? 'Победа +' : 'Проигрыш -'}${fmt(d.amount)} ₽`);
+                    pushUnique(l, d.id, d.date, d.time, "🎲 Игра в кости (Казино)", `${d.result === 'win' ? 'Победа +' : 'Проигрыш -'}${fmt(d.amount)} ₽`, 'casino');
                 });
 
-                // Реконструкция из Долгов
                 (u.debts || []).forEach(d => {
-                    pushUnique(l, d.id, d.date, d.time, "💸 Запись о долге", `${d.person}: ${fmt(d.amount)} ₽ (${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'})`);
+                    pushUnique(l, d.id, d.date, d.time, "💸 Запись о долге", `${d.person}: ${fmt(d.amount)} ₽ (${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'})`, 'debts');
                 });
             });
 
-            combined.sort((a, b) => (b.id || 0) - (a.id || 0));
+            // Сортировка
+            combined.sort((a, b) => {
+                if (sortOrder === 'time_desc') return (b.ts || 0) - (a.ts || 0);
+                if (sortOrder === 'time_asc') return (a.ts || 0) - (b.ts || 0);
+                if (sortOrder === 'user_asc') return a.login.localeCompare(b.login) || ((b.ts || 0) - (a.ts || 0));
+                if (sortOrder === 'action_asc') return a.action.localeCompare(b.action) || ((b.ts || 0) - (a.ts || 0));
+                return 0;
+            });
 
-            renderList('admin-logs-list', combined.slice(0, 300), "Логов действий для выбранного фильтра пока нет", 4, l => `
+            let totalItems = combined.length;
+            let totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+            if (adminLogsPage > totalPages) adminLogsPage = totalPages;
+            let startIdx = (adminLogsPage - 1) * pageSize;
+            let pageSlice = combined.slice(startIdx, startIdx + pageSize);
+
+            $('logs-page-info').textContent = `Показано ${pageSlice.length} из ${totalItems} записей (Стр. ${adminLogsPage} из ${totalPages})`;
+            $('btn-logs-prev').disabled = adminLogsPage <= 1;
+            $('btn-logs-next').disabled = adminLogsPage >= totalPages;
+
+            renderList('admin-logs-list', pageSlice, "По выбранным фильтрам записей не найдено", 4, l => `
                 <tr>
-                    <td style="white-space:nowrap;color:var(--text-muted);">${l.date} ${l.time}</td>
+                    <td style="white-space:nowrap;color:var(--text-muted);font-size:0.86rem;">${l.date} ${l.time}</td>
                     <td><strong style="color:var(--accent);">${l.login}</strong></td>
                     <td>${l.action}</td>
-                    <td style="color:var(--success);">${l.details || '—'}</td>
+                    <td style="color:${l.cat === 'nav' ? 'var(--text-muted)' : 'var(--success)'};">${l.details || '—'}</td>
                 </tr>
             `);
         }
@@ -1236,7 +1299,7 @@
                 result === 'win' ? 'success' : 'error',
                 true,
                 "Игра в кости (Казино)",
-                `${result === 'win' ? 'Выигрыш' : 'Проигрыш'} ${fmt(amount)} ₽`
+                `${result === 'win' ? 'Победа' : 'Проигрыш'} ${fmt(amount)} ₽`
             );
         }
 
@@ -1612,21 +1675,59 @@
                 </div>
             </div>
 
-            <!-- Админ 4: Логи действий пользователей -->
+            <!-- Админ 4: Компактные логи действий пользователей с сортировкой и пагинацией -->
             <div id="admin-sub-logs" class="admin-content">
                 <div class="card admin-card">
-                    <h2>📋 Логи действий и операций всех пользователей</h2>
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <select id="admin-log-user-filter" style="flex:1; margin-top:0;">
-                            <option value="all">Все пользователи</option>
-                        </select>
-                        <button type="button" id="btn-admin-refresh-logs" class="secondary" style="width:auto; margin-top:0;">🔄 Обновить</button>
-                        <button type="button" id="btn-admin-clear-logs" class="danger" style="width:auto; margin-top:0;">🧹 Очистить журнал кликов</button>
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
+                        <h2 style="margin:0; border:none; padding:0;">📋 Журнал действий и операций игроков</h2>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" id="btn-admin-refresh-logs" class="secondary" style="width:auto; margin:0; padding:8px 14px; font-size:0.88rem;">🔄 Обновить</button>
+                            <button type="button" id="btn-admin-clear-logs" class="danger" style="width:auto; margin:0; padding:8px 14px; font-size:0.88rem;">🧹 Очистить клики</button>
+                        </div>
                     </div>
-                    <table>
-                        <thead><tr><th style="width:140px;">Дата / Время</th><th style="width:120px;">Игрок</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
-                        <tbody id="admin-logs-list"><tr><td colspan="4" style="text-align:center;">Загрузка логов...</td></tr></tbody>
-                    </table>
+
+                    <div class="logs-toolbar">
+                        <select id="admin-log-user-filter">
+                            <option value="all">👤 Все игроки</option>
+                        </select>
+                        <select id="admin-log-type-filter">
+                            <option value="all">📂 Все события (клики + операции)</option>
+                            <option value="operations">💰 Только финансовые операции</option>
+                            <option value="theft">🚗 Только Угонщик</option>
+                            <option value="perekup">📈 Только Перекуп</option>
+                            <option value="farm_other">📦 Закладки и Дома</option>
+                            <option value="casino">🎲 Только Казино</option>
+                            <option value="debts">💸 Только Долги</option>
+                            <option value="nav">🖱 Только переходы и входы</option>
+                        </select>
+                        <select id="admin-log-sort">
+                            <option value="time_desc">🕒 Сначала новые</option>
+                            <option value="time_asc">🕒 Сначала старые</option>
+                            <option value="user_asc">🔤 По логину игрока (А-Я)</option>
+                            <option value="action_asc">📑 По типу действия</option>
+                        </select>
+                        <input type="text" id="admin-log-search" placeholder="🔍 Поиск (авто, сумма, текст)...">
+                    </div>
+
+                    <div class="logs-scroll-box">
+                        <table>
+                            <thead><tr><th style="width:135px;">Дата / Время</th><th style="width:115px;">Игрок</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
+                            <tbody id="admin-logs-list"><tr><td colspan="4" style="text-align:center;">Загрузка логов...</td></tr></tbody>
+                        </table>
+                    </div>
+
+                    <div class="logs-pagination">
+                        <span id="logs-page-info">Показано 0 из 0</span>
+                        <div class="page-btns">
+                            <select id="admin-log-limit" style="width:auto; margin:0; padding:7px 10px; font-size:0.85rem;">
+                                <option value="25">По 25 строк</option>
+                                <option value="50" selected>По 50 строк</option>
+                                <option value="100">По 100 строк</option>
+                            </select>
+                            <button type="button" id="btn-logs-prev" class="secondary">◀ Назад</button>
+                            <button type="button" id="btn-logs-next" class="secondary">Вперед ▶</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
