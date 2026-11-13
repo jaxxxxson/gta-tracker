@@ -223,6 +223,7 @@
 
         let siteConfig = JSON.parse(JSON.stringify(defaultSiteConfig));
         let currentUser = null, currentLogin = "";
+        let isUserDataLoaded = false; // Защита от перезаписи профиля до полной загрузки из Firebase
         let pendingRegistrationProfile = null;
         let userData = { login: "", charName: "", staticId: "", history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
         let allUsersCache = [];
@@ -238,7 +239,8 @@
             if (name && st) return `<strong>${name}</strong> <span class="static-badge">#${st}</span>`;
             if (name) return `<strong>${name}</strong>`;
             if (st) return `<strong>Игрок</strong> <span class="static-badge">#${st}</span>`;
-            return `<strong>Не указан профиль</strong>`;
+            if (u.login === ADMIN_LOGIN) return `<strong>Евгений Дубровский</strong> <span class="static-badge">#878</span>`;
+            return `<strong>Игрок (${u.login || '—'})</strong>`;
         }
 
         // Отображение в скобках рядом с логином в админке: (Имя Фамилия #Статик)
@@ -261,17 +263,19 @@
             $('btn-register').style.display = isReg ? 'block' : 'none';
         };
 
+        // Безопасное логирование (не перезаписывает поле login, если профиль еще загружается)
         async function logAction(action, details = "") {
-            if (!currentUser || !currentLogin) return;
+            if (!currentUser || !currentLogin || !isUserDataLoaded) return;
             if (!userData.activityLogs) userData.activityLogs = [];
             let { date, time } = getMskNow();
-            let entry = { id: Date.now(), login: currentLogin, date, time, action, details };
+            let safeLogin = userData.login || currentLogin;
+            let entry = { id: Date.now(), login: safeLogin, date, time, action, details };
 
             userData.activityLogs.unshift(entry);
             if (userData.activityLogs.length > 200) userData.activityLogs.length = 200;
 
             try {
-                await setDoc(doc(db, "users", currentUser.uid), { login: currentLogin, activityLogs: userData.activityLogs }, { merge: true });
+                await setDoc(doc(db, "users", currentUser.uid), { login: safeLogin, activityLogs: userData.activityLogs }, { merge: true });
             } catch (e) { console.error(e); }
 
             try {
@@ -307,7 +311,7 @@
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + name));
             if (pushState) history.pushState({ tab: name }, '', '/' + name);
-            if (currentUser) {
+            if (currentUser && isUserDataLoaded) {
                 logAction("Переход во вкладку", name);
                 if (name === 'rating' || name === 'admin') loadGlobalRatings();
             }
@@ -316,7 +320,7 @@
         window.switchFarmSub = function(subKey, labelText = "") {
             document.querySelectorAll('.farm-sub').forEach(x => x.classList.toggle('active', x.dataset.farmSub === subKey));
             document.querySelectorAll('.farm-content').forEach(x => x.classList.toggle('active', x.id === 'farm-sub-' + subKey));
-            logAction("Открыт подраздел фарма", labelText || subKey);
+            if (isUserDataLoaded) logAction("Открыт подраздел фарма", labelText || subKey);
         };
 
         function applySiteConfig() {
@@ -483,6 +487,7 @@
                 `;
                 ratingTab.appendChild(rCard);
             });
+            if (allUsersCache.length > 0) renderRatings(allUsersCache);
         }
 
         window.addCustomSecRecord = async function(secId) {
@@ -589,6 +594,7 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
+                    isUserDataLoaded = false;
                     currentLogin = user.email.split('@')[0];
                     if (currentLogin !== ADMIN_LOGIN) {
                         let snap = await getDoc(doc(db, "system", "config"));
@@ -612,7 +618,7 @@
                     await logAction("Вход на сайт", `${userData.charName || currentLogin} (#${userData.staticId || '—'})`);
                     if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
                 } else {
-                    currentUser = null; currentLogin = "";
+                    currentUser = null; currentLogin = ""; isUserDataLoaded = false;
                     if (subInterval) { clearInterval(subInterval); subInterval = null; }
                     if (globalRefreshInterval) { clearInterval(globalRefreshInterval); globalRefreshInterval = null; }
                     $('auth-section').style.display = 'block';
@@ -636,9 +642,20 @@
                 let snap = await getDocs(collection(db, "users")), all = [];
                 snap.forEach(d => {
                     let data = d.data();
-                    let resolvedLogin = data.login || (data.email ? data.email.split('@')[0] : `user_${d.id.slice(0, 5)}`);
+                    // Если это наш текущий аккаунт — берем самые свежие данные и гарантируем логин
+                    let isMe = currentUser && d.id === currentUser.uid;
+                    let resolvedLogin = (data.login || "").trim() || (isMe ? currentLogin : (data.email ? data.email.split('@')[0] : `user_${d.id.slice(0, 5)}`));
                     all.push({ uid: d.id, ...data, login: resolvedLogin });
                 });
+
+                // Если текущего авторизованного игрока по какой-то причине еще нет в выборке или его данные обновились локально — синхронизируем
+                if (currentUser && isUserDataLoaded) {
+                    let myIdx = all.findIndex(u => u.uid === currentUser.uid);
+                    let mergedMe = { uid: currentUser.uid, ...userData, login: userData.login || currentLogin };
+                    if (myIdx >= 0) all[myIdx] = { ...all[myIdx], ...mergedMe };
+                    else all.push(mergedMe);
+                }
+
                 allUsersCache = all;
 
                 try {
@@ -665,44 +682,54 @@
             let theft = {}, courier = {}, house = {}, reseller = {}, casino = {}, debts = {}, customMap = {};
 
             list.forEach(u => {
-                let l = u.login;
+                let l = (u.login || "").trim() || u.uid;
                 if (!l || l.startsWith("Игрок_") || l === "Игрок" || l === "Неизвестный") return;
+
+                // Группируем по ключу игрока, а если имя/статик уже известны — обновляем красивую подпись
                 let pubName = formatPublicPlayer(u);
 
                 u.history?.forEach(x => {
                     if (x.status !== 'caught') {
                         theft[l] = theft[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
-                        theft[l].tc++; theft[l].te += (x.price || 0);
-                        if ((x.date || today) === today) { theft[l].c++; theft[l].e += (x.price || 0); }
+                        if (u.charName) theft[l].pubName = pubName;
+                        theft[l].tc++; theft[l].te += (Number(x.price) || 0);
+                        if ((x.date || today) === today) { theft[l].c++; theft[l].e += (Number(x.price) || 0); }
                     }
                 });
                 u.courierHistory?.forEach(x => {
                     courier[l] = courier[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
-                    courier[l].tc += (x.count || 0); courier[l].te += (x.earned || 0);
-                    if ((x.date || today) === today) { courier[l].c += (x.count || 0); courier[l].e += (x.earned || 0); }
+                    if (u.charName) courier[l].pubName = pubName;
+                    courier[l].tc += (Number(x.count) || 0); courier[l].te += (Number(x.earned) || 0);
+                    if ((x.date || today) === today) { courier[l].c += (Number(x.count) || 0); courier[l].e += (Number(x.earned) || 0); }
                 });
                 u.houseHistory?.forEach(x => {
                     house[l] = house[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
-                    house[l].tc++; house[l].te += (x.amount || 0);
-                    if ((x.date || today) === today) { house[l].c++; house[l].e += (x.amount || 0); }
+                    if (u.charName) house[l].pubName = pubName;
+                    house[l].tc++; house[l].te += (Number(x.amount) || 0);
+                    if ((x.date || today) === today) { house[l].c++; house[l].e += (Number(x.amount) || 0); }
                 });
                 u.resellerItems?.forEach(x => {
                     if (x.status === 'sold') {
                         reseller[l] = reseller[l] || { pubName, items: [], p: 0, rev: 0 };
-                        let p = (x.sellPrice || 0) - (x.buyPrice || 0);
-                        reseller[l].p += p; reseller[l].rev += (x.sellPrice || 0);
+                        if (u.charName) reseller[l].pubName = pubName;
+                        let p = (Number(x.sellPrice) || 0) - (Number(x.buyPrice) || 0);
+                        reseller[l].p += p; reseller[l].rev += (Number(x.sellPrice) || 0);
                         reseller[l].items.push({ name: x.name, buy: x.buyPrice, sell: x.sellPrice, p });
                     }
                 });
                 u.diceHistory?.forEach(x => {
                     casino[l] = casino[l] || { pubName, w: 0, l: 0, net: 0 };
-                    if (x.result === 'win') { casino[l].w += (x.amount || 0); casino[l].net += (x.amount || 0); }
-                    else { casino[l].l += (x.amount || 0); casino[l].net -= (x.amount || 0); }
+                    if (u.charName) casino[l].pubName = pubName;
+                    let amt = Number(x.amount) || 0;
+                    if (x.result === 'win') { casino[l].w += amt; casino[l].net += amt; }
+                    else { casino[l].l += amt; casino[l].net -= amt; }
                 });
                 u.debts?.forEach(x => {
                     debts[l] = debts[l] || { pubName, iOwe: 0, owesMe: 0, net: 0 };
-                    if (x.type === 'i_owe') { debts[l].iOwe += (x.amount || 0); debts[l].net -= (x.amount || 0); }
-                    else { debts[l].owesMe += (x.amount || 0); debts[l].net += (x.amount || 0); }
+                    if (u.charName) debts[l].pubName = pubName;
+                    let amt = Number(x.amount) || 0;
+                    if (x.type === 'i_owe') { debts[l].iOwe += amt; debts[l].net -= amt; }
+                    else { debts[l].owesMe += amt; debts[l].net += amt; }
                 });
 
                 if (u.customRecords) {
@@ -710,34 +737,39 @@
                         customMap[secId] = customMap[secId] || {};
                         u.customRecords[secId].forEach(r => {
                             customMap[secId][l] = customMap[secId][l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
-                            customMap[secId][l].tc += (r.count || 1);
-                            customMap[secId][l].te += (r.amount || 0);
+                            if (u.charName) customMap[secId][l].pubName = pubName;
+                            customMap[secId][l].tc += (Number(r.count) || 1);
+                            customMap[secId][l].te += (Number(r.amount) || 0);
                             if ((r.date || today) === today) {
-                                customMap[secId][l].c += (r.count || 1);
-                                customMap[secId][l].e += (r.amount || 0);
+                                customMap[secId][l].c += (Number(r.count) || 1);
+                                customMap[secId][l].e += (Number(r.amount) || 0);
                             }
                         });
                     });
                 }
             });
 
-            const fillTable = (id, data, sortKey, rowBuilder) => {
-                let arr = Object.keys(data || {}).map(login => ({ login, ...data[login] })).sort((a, b) => b[sortKey] - a[sortKey]);
+            // Сортировка: сначала по показателю за сегодня, а если за сегодня 0 — по показателю за всё время!
+            const fillTable = (id, data, sortKey, secondaryKey, rowBuilder) => {
+                let arr = Object.keys(data || {}).map(login => ({ login, ...data[login] })).sort((a, b) => {
+                    if (b[sortKey] !== a[sortKey]) return b[sortKey] - a[sortKey];
+                    return (b[secondaryKey] || 0) - (a[secondaryKey] || 0);
+                });
                 renderList(id, arr, "Нет данных", 4, rowBuilder);
             };
 
-            fillTable('rating-theft-list', theft, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-courier-list', courier, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-house-list', house, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-reseller-list', reseller, 'p', (i, idx) => {
+            fillTable('rating-theft-list', theft, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
+            fillTable('rating-courier-list', courier, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
+            fillTable('rating-house-list', house, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
+            fillTable('rating-reseller-list', reseller, 'p', 'rev', (i, idx) => {
                 let last = i.items[0] ? `${i.items[0].name} (куп: ${fmt(i.items[0].buy)} ₽, прод: ${fmt(i.items[0].sell)} ₽)` : "Нет продаж";
                 return `<tr><td>#${idx + 1} ${i.pubName}</td><td>${last}</td><td style="color:var(--accent);">${fmt(i.rev)} ₽</td><td style="color:${i.p >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.p)} ₽</td></tr>`;
             });
-            fillTable('rating-casino-list', casino, 'net', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--success);">+${fmt(i.w)} ₽</td><td style="color:var(--danger);">-${fmt(i.l)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
-            fillTable('rating-debts-list', debts, 'net', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
+            fillTable('rating-casino-list', casino, 'net', 'w', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--success);">+${fmt(i.w)} ₽</td><td style="color:var(--danger);">-${fmt(i.l)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
+            fillTable('rating-debts-list', debts, 'net', 'owesMe', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
 
             (siteConfig.customSections || []).forEach(sec => {
-                fillTable(`dyn-rating-${sec.id}`, customMap[sec.id] || {}, 'e', (i, idx) => `
+                fillTable(`dyn-rating-${sec.id}`, customMap[sec.id] || {}, 'e', 'te', (i, idx) => `
                     <tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} (${i.tc} всего)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>
                 `);
             });
@@ -751,7 +783,6 @@
             return exp - Date.now();
         }
 
-        // Таблица подписок: сортировка от БОЛЬШЕГО количества дней к МЕНЬШЕМУ (внизу истекшие) + (Имя Фамилия #Статик) в скобках
         function renderAllowedUsersList() {
             let arr = Object.keys(allowedUsersMapCache).map(login => {
                 let uObj = allUsersCache.find(u => u.login === login);
@@ -771,7 +802,6 @@
             `);
         }
 
-        // Таблица зарегистрированных игроков: сортировка от БОЛЬШЕГО количества дней подписки к истекшим, редактирование Логина, Имени, Статика, Дней и Удаление
         function renderAdminUsersProfiles() {
             let sorted = [...allUsersCache].map(u => {
                 let diff = getRemainingDiffForLogin(u.login);
@@ -813,10 +843,8 @@
             if (!newLogin) return showToast("Логин не может быть пустым!", "error");
 
             try {
-                // 1. Обновляем профиль игрока в коллекции users
                 await setDoc(doc(db, "users", uid), { login: newLogin, charName, staticId }, { merge: true });
 
-                // 2. Обновляем подписку в system/config (переносим на новый логин, если логин был изменен, и обновляем дни)
                 if (oldLogin !== ADMIN_LOGIN) {
                     let ref = doc(db, "system", "config"), snap = await getDoc(ref);
                     let map = snap.exists() ? { ...(snap.data().allowedUsersMap || {}) } : {};
@@ -1383,7 +1411,7 @@
             let snap = await getDoc(doc(db, "users", currentUser.uid));
             if (snap.exists()) {
                 userData = snap.data();
-                userData.login = currentLogin;
+                if (!userData.login) userData.login = currentLogin;
                 if (pendingRegistrationProfile) {
                     userData.charName = pendingRegistrationProfile.charName;
                     userData.staticId = pendingRegistrationProfile.staticId;
@@ -1394,19 +1422,20 @@
             } else {
                 userData = {
                     login: currentLogin,
-                    charName: pendingRegistrationProfile?.charName || (currentLogin === ADMIN_LOGIN ? "Администратор" : ""),
-                    staticId: pendingRegistrationProfile?.staticId || "",
+                    charName: pendingRegistrationProfile?.charName || (currentLogin === ADMIN_LOGIN ? "Евгений Дубровский" : ""),
+                    staticId: pendingRegistrationProfile?.staticId || (currentLogin === ADMIN_LOGIN ? "878" : ""),
                     history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: []
                 };
                 pendingRegistrationProfile = null;
             }
+            isUserDataLoaded = true;
             await saveUserData();
             renderState();
         }
 
         async function saveUserData() {
-            if (!currentUser) return;
-            userData.login = currentLogin;
+            if (!currentUser || !isUserDataLoaded) return;
+            if (!userData.login) userData.login = currentLogin;
             await setDoc(doc(db, "users", currentUser.uid), userData, { merge: true });
         }
 
@@ -1561,8 +1590,9 @@
         }
 
         function renderState() {
-            let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : currentLogin;
-            if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${currentLogin}]</small>`;
+            let displayLogin = userData.login || currentLogin;
+            let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : displayLogin;
+            if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${displayLogin}]</small>`;
 
             if (userData.activeTheft) {
                 $('active-panel').style.display = 'block';
