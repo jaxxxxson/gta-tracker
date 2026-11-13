@@ -124,6 +124,7 @@
         window.formatMoneyInput = function(input) {
             let v = input.value.replace(/\D/g, '');
             input.value = v ? Number(v).toLocaleString('ru-RU') : "";
+            if (input.id === 'custom-theft-price') updateCarInfo();
         };
 
         const getCleanNumber = (id) => parseFloat($(id)?.value.replace(/\s/g, '')) || 0;
@@ -144,6 +145,7 @@
             { name: "Maranello F12 Verleenetta", day: 41650, night: 28325 },
             { name: "Maranello FXX-K", day: 65625, night: 46875 },
             { name: "Maranello Timucua SP3", day: 65625, night: 46875 },
+            { name: "Molsheim Atlantick", day: 65625, night: 46875 },
             { name: "Molsheim Formula", day: 65625, night: 46875 },
             { name: "Molsheim Shiron", day: 65625, night: 46875 },
             { name: "Molsheim Vivo", day: 65625, night: 46875 },
@@ -401,12 +403,26 @@
         };
 
         window.toggleWheelBonus = function(cb) {
+            if (cb.checked && $('custom-price-check')) {
+                $('custom-price-check').checked = false;
+                $('custom-price-box').style.display = 'none';
+            }
             $('wheel-bonus-select-box').style.display = cb.checked ? 'block' : 'none';
+            updateCarInfo();
+        };
+
+        window.toggleCustomPrice = function(cb) {
+            if (cb.checked && $('wheel-bonus-check')) {
+                $('wheel-bonus-check').checked = false;
+                $('wheel-bonus-select-box').style.display = 'none';
+            }
+            $('custom-price-box').style.display = cb.checked ? 'block' : 'none';
             updateCarInfo();
         };
 
         function getActiveBonusPercent() {
             if ($('level-select').value !== '7') return 0;
+            if ($('custom-price-check')?.checked) return 0;
             let cb = $('wheel-bonus-check');
             return (cb && cb.checked) ? (parseInt($('wheel-bonus-select').value) || 0) : 0;
         }
@@ -415,7 +431,13 @@
             let isLevel7 = $('level-select').value === '7';
             $('car-select-box').style.display = isLevel7 ? 'block' : 'none';
             $('wheel-bonus-container').style.display = isLevel7 ? 'block' : 'none';
-            $('custom-price-box').style.display = isLevel7 ? 'none' : 'block';
+            $('custom-price-check-container').style.display = isLevel7 ? 'block' : 'none';
+
+            if (!isLevel7) {
+                $('custom-price-box').style.display = 'block';
+            } else {
+                $('custom-price-box').style.display = $('custom-price-check')?.checked ? 'block' : 'none';
+            }
             updateCarInfo();
         }
 
@@ -429,6 +451,15 @@
             }
             let car = getSelectedCar();
             if (!car) { info.textContent = ""; return; }
+
+            if ($('custom-price-check')?.checked) {
+                let customVal = getCleanNumber('custom-theft-price');
+                info.innerHTML = customVal > 0
+                    ? `Своя цена оплаты: <strong style="color: var(--accent);">${fmt(customVal)} ₽</strong>`
+                    : `Введите свою сумму оплаты в поле выше`;
+                return;
+            }
+
             let night = isNight();
             let basePrice = night ? car.night : car.day;
             let bonusPct = getActiveBonusPercent();
@@ -562,8 +593,15 @@
             } else {
                 let car = getSelectedCar();
                 if (!car) return;
-                let bonusPercent = getActiveBonusPercent();
-                userData.activeTheft = { level: '7', carName: car.name, bonusPercent, startTime: Date.now() };
+                if ($('custom-price-check')?.checked) {
+                    let customPrice = getCleanNumber('custom-theft-price');
+                    if (customPrice <= 0) return showToast("Введите свою сумму оплаты за авто!", "error");
+                    userData.activeTheft = { level: '7', carName: car.name, customPrice, bonusPercent: 0, startTime: Date.now() };
+                    $('custom-theft-price').value = "";
+                } else {
+                    let bonusPercent = getActiveBonusPercent();
+                    userData.activeTheft = { level: '7', carName: car.name, bonusPercent, startTime: Date.now() };
+                }
             }
             await saveUserData(); renderState();
             showToast(`Угон начат: ${userData.activeTheft.carName}`);
@@ -583,7 +621,7 @@
                 price = Math.round(basePrice * (1 + bonusPct / 100));
             }
 
-            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : name;
+            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice && level === '7' ? `${name} (своя цена)` : name);
 
             userData.history.unshift({ name: displayCarName, level, duration: `${Math.floor(sec / 60)} мин ${sec % 60} сек`, price, status: 'success', ...getMskNow() });
             userData.activeTheft = null;
@@ -873,9 +911,16 @@
                         </div>
                     </div>
 
+                    <div id="custom-price-check-container" style="margin-top: 12px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="custom-price-check" style="width: auto; margin: 0;" onchange="toggleCustomPrice(this)">
+                            <span>Другая сумма оплаты (свой бонус / ручной ввод)</span>
+                        </label>
+                    </div>
+
                     <div id="custom-price-box" style="display:none;">
                         <label style="margin-top: 15px; display: block;">Стоимость за авто (₽):</label>
-                        <input type="text" id="custom-theft-price" placeholder="Например, 15 000" oninput="formatMoneyInput(this)">
+                        <input type="text" id="custom-theft-price" placeholder="Например, 55 000" oninput="formatMoneyInput(this)">
                     </div>
 
                     <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
