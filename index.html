@@ -34,7 +34,7 @@
         h2 { font-size: 1.3rem; font-weight: 700; color: #f9fafb; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; }
         .nav-tabs, .sub-tabs { display: flex; gap: 12px; margin-bottom: 25px; flex-wrap: wrap; align-items: center; }
         .sub-tabs { padding-left: 15px; border-left: 3px solid var(--accent); justify-content: space-between; }
-        .sub-tabs-links { display: flex; gap: 10px; flex-wrap: wrap; }
+        .sub-tabs-links { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
         .nav-btn, .sub-btn {
             flex: 1; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--card-border);
             background: var(--card-bg); backdrop-filter: blur(12px); color: var(--text-muted);
@@ -54,6 +54,7 @@
         .admin-card { border: 1px dashed rgba(245, 158, 11, 0.4); background: rgba(15, 23, 42, 0.85); }
         input, select, button { width: 100%; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(3, 7, 18, 0.7); color: var(--text-color); font-size: 0.98rem; margin-top: 10px; outline: none; box-sizing: border-box; }
         input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
         button { background: var(--gold-gradient); color: #000; font-weight: 700; cursor: pointer; border: none; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3); transition: 0.2s; }
         button:hover { transform: translateY(-1px); }
         button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
@@ -97,6 +98,8 @@
         .logs-pagination .page-btns { display: flex; gap: 8px; align-items: center; }
         .logs-pagination button { width: auto; margin-top: 0; padding: 8px 14px; font-size: 0.88rem; }
         .static-badge { color: var(--accent); font-weight: 700; font-size: 0.86rem; margin-left: 4px; }
+        .rating-filter-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: var(--card-bg); border: 1px solid var(--card-border); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 14px; margin-bottom: 25px; }
+        .rating-date-picker { width: auto; margin-top: 0; padding: 8px 12px; font-size: 0.9rem; border-color: var(--accent); }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -132,10 +135,13 @@
         const isNight = (d = new Date()) => { let m = d.getHours() * 60 + d.getMinutes(); return m >= 60 && m < 540; };
         const getMskNow = () => {
             let now = new Date();
+            let dateStr = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+            let [dd, mm, yyyy] = dateStr.split('.');
             return {
                 time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                 shortTime: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
-                date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+                date: dateStr,
+                isoDate: `${yyyy}-${mm}-${dd}`
             };
         };
         const getCleanNumber = (id) => parseFloat($(id)?.value.replace(/\s/g, '')) || 0;
@@ -223,16 +229,17 @@
 
         let siteConfig = JSON.parse(JSON.stringify(defaultSiteConfig));
         let currentUser = null, currentLogin = "";
-        let isUserDataLoaded = false; // Защита от перезаписи профиля до полной загрузки из Firebase
+        let isUserDataLoaded = false;
         let pendingRegistrationProfile = null;
         let userData = { login: "", charName: "", staticId: "", history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
         let allUsersCache = [];
         let allowedUsersMapCache = {};
         let globalLogsCache = [];
         let adminLogsPage = 1;
+        let ratingPeriod = 'today'; // 'today' | 'week' | 'month' | 'all' | 'custom'
+        let ratingCustomDate = '';  // 'DD.MM.YYYY'
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
-        // Отображение в Рейтинге: только Имя Фамилия и Статик
         function formatPublicPlayer(u) {
             let name = (u.charName || "").trim();
             let st = (u.staticId || "").trim().replace(/^#/, '');
@@ -243,7 +250,6 @@
             return `<strong>Игрок (${u.login || '—'})</strong>`;
         }
 
-        // Отображение в скобках рядом с логином в админке: (Имя Фамилия #Статик)
         function formatBracketProfile(u) {
             if (!u) return "";
             let name = (u.charName || "").trim();
@@ -263,7 +269,70 @@
             $('btn-register').style.display = isReg ? 'block' : 'none';
         };
 
-        // Безопасное логирование (не перезаписывает поле login, если профиль еще загружается)
+        // Переключение периода в Рейтинге
+        window.setRatingPeriod = function(period) {
+            ratingPeriod = period;
+            document.querySelectorAll('.rating-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+            let dateInput = $('rating-custom-date');
+            if (dateInput) {
+                dateInput.style.display = period === 'custom' ? 'block' : 'none';
+                if (period === 'custom' && !dateInput.value) {
+                    dateInput.value = getMskNow().isoDate;
+                    let [y, m, d] = dateInput.value.split('-');
+                    ratingCustomDate = `${d}.${m}.${y}`;
+                }
+            }
+            renderRatings(allUsersCache);
+            if (isUserDataLoaded) logAction("Выбран период рейтинга", period === 'custom' ? `Дата: ${ratingCustomDate}` : period);
+        };
+
+        window.onRatingDateChange = function(input) {
+            if (!input.value) return;
+            let [y, m, d] = input.value.split('-');
+            ratingCustomDate = `${d}.${m}.${y}`;
+            ratingPeriod = 'custom';
+            document.querySelectorAll('.rating-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === 'custom'));
+            renderRatings(allUsersCache);
+            if (isUserDataLoaded) logAction("Выбрана дата в рейтинге", ratingCustomDate);
+        };
+
+        function getRatingPeriodLabel() {
+            if (ratingPeriod === 'today') return 'за сегодня';
+            if (ratingPeriod === 'week') return 'за 7 дней';
+            if (ratingPeriod === 'month') return 'за 30 дней';
+            if (ratingPeriod === 'all') return 'за всё время';
+            if (ratingPeriod === 'custom') return ratingCustomDate ? `за ${ratingCustomDate}` : 'за дату';
+            return 'за период';
+        }
+
+        // Проверка попадания записи в выбранный период рейтинга
+        function isRecordInRatingPeriod(dateStr, timestampMs = 0) {
+            if (ratingPeriod === 'all') return true;
+            let todayStr = getMskNow().date;
+
+            if (!dateStr && timestampMs > 1000000000000) {
+                dateStr = new Date(timestampMs).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+            }
+            let dStr = dateStr || todayStr;
+
+            if (ratingPeriod === 'today') return dStr === todayStr;
+            if (ratingPeriod === 'custom') return ratingCustomDate ? dStr === ratingCustomDate : dStr === todayStr;
+
+            let parts = dStr.split('.');
+            if (parts.length !== 3) return false;
+            let recDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            recDate.setHours(0, 0, 0, 0);
+
+            let tParts = todayStr.split('.');
+            let curDate = new Date(parseInt(tParts[2]), parseInt(tParts[1]) - 1, parseInt(tParts[0]));
+            curDate.setHours(0, 0, 0, 0);
+
+            let diffDays = (curDate - recDate) / 86400000;
+            if (ratingPeriod === 'week') return diffDays >= 0 && diffDays < 7;
+            if (ratingPeriod === 'month') return diffDays >= 0 && diffDays < 30;
+            return true;
+        }
+
         async function logAction(action, details = "") {
             if (!currentUser || !currentLogin || !isUserDataLoaded) return;
             if (!userData.activityLogs) userData.activityLogs = [];
@@ -481,7 +550,7 @@
                 rCard.innerHTML = `
                     <h2>${sec.title} — Рейтинг</h2>
                     <table>
-                        <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>За сегодня</th><th>Заработано сегодня</th><th>За всё время</th></tr></thead>
+                        <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th class="dyn-period-col-cnt">Кол-во за период</th><th class="dyn-period-col-earn">Заработано за период</th><th>За всё время</th></tr></thead>
                         <tbody id="dyn-rating-${sec.id}"><tr><td colspan="4" style="text-align:center;">Нет данных</td></tr></tbody>
                     </table>
                 `;
@@ -642,13 +711,11 @@
                 let snap = await getDocs(collection(db, "users")), all = [];
                 snap.forEach(d => {
                     let data = d.data();
-                    // Если это наш текущий аккаунт — берем самые свежие данные и гарантируем логин
                     let isMe = currentUser && d.id === currentUser.uid;
                     let resolvedLogin = (data.login || "").trim() || (isMe ? currentLogin : (data.email ? data.email.split('@')[0] : `user_${d.id.slice(0, 5)}`));
                     all.push({ uid: d.id, ...data, login: resolvedLogin });
                 });
 
-                // Если текущего авторизованного игрока по какой-то причине еще нет в выборке или его данные обновились локально — синхронизируем
                 if (currentUser && isUserDataLoaded) {
                     let myIdx = all.findIndex(u => u.uid === currentUser.uid);
                     let mergedMe = { uid: currentUser.uid, ...userData, login: userData.login || currentLogin };
@@ -678,58 +745,92 @@
         }
 
         function renderRatings(list) {
-            let today = getMskNow().date;
+            let pLabel = getRatingPeriodLabel();
+
+            // Обновляем заголовки колонок под выбранный период
+            if ($('th-theft-cnt')) $('th-theft-cnt').textContent = `Машин (${pLabel})`;
+            if ($('th-theft-earn')) $('th-theft-earn').textContent = `Заработано (${pLabel})`;
+            if ($('th-courier-cnt')) $('th-courier-cnt').textContent = `Закладок (${pLabel})`;
+            if ($('th-courier-earn')) $('th-courier-earn').textContent = `Заработано (${pLabel})`;
+            if ($('th-house-cnt')) $('th-house-cnt').textContent = `Ограблений (${pLabel})`;
+            if ($('th-house-earn')) $('th-house-earn').textContent = `Заработано (${pLabel})`;
+            if ($('th-reseller-rev')) $('th-reseller-rev').textContent = `Выручка (${pLabel})`;
+            if ($('th-reseller-prof')) $('th-reseller-prof').textContent = `Чистая прибыль (${pLabel})`;
+            if ($('th-casino-win')) $('th-casino-win').textContent = `Выиграно (${pLabel})`;
+            if ($('th-casino-lose')) $('th-casino-lose').textContent = `Проиграно (${pLabel})`;
+            if ($('th-casino-net')) $('th-casino-net').textContent = `Баланс (${pLabel})`;
+            if ($('th-debts-owe')) $('th-debts-owe').textContent = `Должен (${pLabel})`;
+            if ($('th-debts-oweme')) $('th-debts-oweme').textContent = `Должны ему (${pLabel})`;
+            if ($('th-debts-net')) $('th-debts-net').textContent = `Баланс (${pLabel})`;
+
+            document.querySelectorAll('.dyn-period-col-cnt').forEach(el => el.textContent = `Кол-во (${pLabel})`);
+            document.querySelectorAll('.dyn-period-col-earn').forEach(el => el.textContent = `Заработано (${pLabel})`);
+
             let theft = {}, courier = {}, house = {}, reseller = {}, casino = {}, debts = {}, customMap = {};
 
             list.forEach(u => {
                 let l = (u.login || "").trim() || u.uid;
                 if (!l || l.startsWith("Игрок_") || l === "Игрок" || l === "Неизвестный") return;
-
-                // Группируем по ключу игрока, а если имя/статик уже известны — обновляем красивую подпись
                 let pubName = formatPublicPlayer(u);
 
                 u.history?.forEach(x => {
                     if (x.status !== 'caught') {
                         theft[l] = theft[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                         if (u.charName) theft[l].pubName = pubName;
-                        theft[l].tc++; theft[l].te += (Number(x.price) || 0);
-                        if ((x.date || today) === today) { theft[l].c++; theft[l].e += (Number(x.price) || 0); }
+                        let pr = Number(x.price) || 0;
+                        theft[l].tc++; theft[l].te += pr;
+                        if (isRecordInRatingPeriod(x.date, x.id)) { theft[l].c++; theft[l].e += pr; }
                     }
                 });
+
                 u.courierHistory?.forEach(x => {
                     courier[l] = courier[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                     if (u.charName) courier[l].pubName = pubName;
-                    courier[l].tc += (Number(x.count) || 0); courier[l].te += (Number(x.earned) || 0);
-                    if ((x.date || today) === today) { courier[l].c += (Number(x.count) || 0); courier[l].e += (Number(x.earned) || 0); }
+                    let cnt = Number(x.count) || 0, earn = Number(x.earned) || 0;
+                    courier[l].tc += cnt; courier[l].te += earn;
+                    if (isRecordInRatingPeriod(x.date, x.id)) { courier[l].c += cnt; courier[l].e += earn; }
                 });
+
                 u.houseHistory?.forEach(x => {
                     house[l] = house[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                     if (u.charName) house[l].pubName = pubName;
-                    house[l].tc++; house[l].te += (Number(x.amount) || 0);
-                    if ((x.date || today) === today) { house[l].c++; house[l].e += (Number(x.amount) || 0); }
+                    let amt = Number(x.amount) || 0;
+                    house[l].tc++; house[l].te += amt;
+                    if (isRecordInRatingPeriod(x.date, x.id)) { house[l].c++; house[l].e += amt; }
                 });
+
                 u.resellerItems?.forEach(x => {
                     if (x.status === 'sold') {
-                        reseller[l] = reseller[l] || { pubName, items: [], p: 0, rev: 0 };
+                        reseller[l] = reseller[l] || { pubName, items: [], p: 0, rev: 0, tp: 0 };
                         if (u.charName) reseller[l].pubName = pubName;
                         let p = (Number(x.sellPrice) || 0) - (Number(x.buyPrice) || 0);
-                        reseller[l].p += p; reseller[l].rev += (Number(x.sellPrice) || 0);
-                        reseller[l].items.push({ name: x.name, buy: x.buyPrice, sell: x.sellPrice, p });
+                        reseller[l].tp += p;
+                        if (isRecordInRatingPeriod(null, x.soldTime || x.startTime || x.id)) {
+                            reseller[l].p += p;
+                            reseller[l].rev += (Number(x.sellPrice) || 0);
+                            reseller[l].items.push({ name: x.name, buy: x.buyPrice, sell: x.sellPrice, p });
+                        }
                     }
                 });
+
                 u.diceHistory?.forEach(x => {
-                    casino[l] = casino[l] || { pubName, w: 0, l: 0, net: 0 };
-                    if (u.charName) casino[l].pubName = pubName;
-                    let amt = Number(x.amount) || 0;
-                    if (x.result === 'win') { casino[l].w += amt; casino[l].net += amt; }
-                    else { casino[l].l += amt; casino[l].net -= amt; }
+                    if (isRecordInRatingPeriod(x.date, x.id)) {
+                        casino[l] = casino[l] || { pubName, w: 0, l: 0, net: 0 };
+                        if (u.charName) casino[l].pubName = pubName;
+                        let amt = Number(x.amount) || 0;
+                        if (x.result === 'win') { casino[l].w += amt; casino[l].net += amt; }
+                        else { casino[l].l += amt; casino[l].net -= amt; }
+                    }
                 });
+
                 u.debts?.forEach(x => {
-                    debts[l] = debts[l] || { pubName, iOwe: 0, owesMe: 0, net: 0 };
-                    if (u.charName) debts[l].pubName = pubName;
-                    let amt = Number(x.amount) || 0;
-                    if (x.type === 'i_owe') { debts[l].iOwe += amt; debts[l].net -= amt; }
-                    else { debts[l].owesMe += amt; debts[l].net += amt; }
+                    if (isRecordInRatingPeriod(x.date, x.id)) {
+                        debts[l] = debts[l] || { pubName, iOwe: 0, owesMe: 0, net: 0 };
+                        if (u.charName) debts[l].pubName = pubName;
+                        let amt = Number(x.amount) || 0;
+                        if (x.type === 'i_owe') { debts[l].iOwe += amt; debts[l].net -= amt; }
+                        else { debts[l].owesMe += amt; debts[l].net += amt; }
+                    }
                 });
 
                 if (u.customRecords) {
@@ -738,40 +839,45 @@
                         u.customRecords[secId].forEach(r => {
                             customMap[secId][l] = customMap[secId][l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                             if (u.charName) customMap[secId][l].pubName = pubName;
-                            customMap[secId][l].tc += (Number(r.count) || 1);
-                            customMap[secId][l].te += (Number(r.amount) || 0);
-                            if ((r.date || today) === today) {
-                                customMap[secId][l].c += (Number(r.count) || 1);
-                                customMap[secId][l].e += (Number(r.amount) || 0);
+                            let cnt = Number(r.count) || 1, amt = Number(r.amount) || 0;
+                            customMap[secId][l].tc += cnt;
+                            customMap[secId][l].te += amt;
+                            if (isRecordInRatingPeriod(r.date, r.id)) {
+                                customMap[secId][l].c += cnt;
+                                customMap[secId][l].e += amt;
                             }
                         });
                     });
                 }
             });
 
-            // Сортировка: сначала по показателю за сегодня, а если за сегодня 0 — по показателю за всё время!
-            const fillTable = (id, data, sortKey, secondaryKey, rowBuilder) => {
-                let arr = Object.keys(data || {}).map(login => ({ login, ...data[login] })).sort((a, b) => {
+            // Если выбран конкретный день/период (не "всё время"), скрываем тех, у кого за этот период 0 активности в Угоне/Фарме/Перекупе, либо сортируем их вниз
+            const fillTable = (id, data, sortKey, secondaryKey, rowBuilder, hideZeroInCustom = false) => {
+                let arr = Object.keys(data || {}).map(login => ({ login, ...data[login] }));
+                if (hideZeroInCustom && ratingPeriod === 'custom') {
+                    arr = arr.filter(x => x.c > 0 || x.p !== 0 || x.rev > 0);
+                }
+                arr.sort((a, b) => {
                     if (b[sortKey] !== a[sortKey]) return b[sortKey] - a[sortKey];
                     return (b[secondaryKey] || 0) - (a[secondaryKey] || 0);
                 });
-                renderList(id, arr, "Нет данных", 4, rowBuilder);
+                renderList(id, arr, `Нет данных (${pLabel})`, 4, rowBuilder);
             };
 
-            fillTable('rating-theft-list', theft, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-courier-list', courier, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-house-list', house, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-reseller-list', reseller, 'p', 'rev', (i, idx) => {
-                let last = i.items[0] ? `${i.items[0].name} (куп: ${fmt(i.items[0].buy)} ₽, прод: ${fmt(i.items[0].sell)} ₽)` : "Нет продаж";
+            fillTable('rating-theft-list', theft, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`, true);
+            fillTable('rating-courier-list', courier, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`, true);
+            fillTable('rating-house-list', house, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`, true);
+            fillTable('rating-reseller-list', reseller, 'p', 'tp', (i, idx) => {
+                let last = i.items[0] ? `${i.items[0].name} (куп: ${fmt(i.items[0].buy)} ₽, прод: ${fmt(i.items[0].sell)} ₽)` : "Нет продаж за период";
                 return `<tr><td>#${idx + 1} ${i.pubName}</td><td>${last}</td><td style="color:var(--accent);">${fmt(i.rev)} ₽</td><td style="color:${i.p >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.p)} ₽</td></tr>`;
-            });
+            }, true);
             fillTable('rating-casino-list', casino, 'net', 'w', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--success);">+${fmt(i.w)} ₽</td><td style="color:var(--danger);">-${fmt(i.l)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
             fillTable('rating-debts-list', debts, 'net', 'owesMe', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
 
             (siteConfig.customSections || []).forEach(sec => {
                 fillTable(`dyn-rating-${sec.id}`, customMap[sec.id] || {}, 'e', 'te', (i, idx) => `
                     <tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} (${i.tc} всего)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>
-                `);
+                `, true);
             });
         }
 
@@ -2205,12 +2311,23 @@
             </div>
         </div>
 
-        <!-- Раздел Рейтинг -->
+        <!-- Раздел Рейтинг (С фильтром периодов и выбором конкретной даты) -->
         <div id="tab-rating" class="tab-content">
+            <div class="rating-filter-bar">
+                <div class="sub-tabs-links">
+                    <button type="button" class="sub-btn rating-period-btn active" data-period="today" onclick="setRatingPeriod('today')">📅 За сегодня</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="week" onclick="setRatingPeriod('week')">📆 За неделю</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="month" onclick="setRatingPeriod('month')">🗓 За месяц</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="all" onclick="setRatingPeriod('all')">♾ За всё время</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="custom" onclick="setRatingPeriod('custom')">🔍 Выбрать дату</button>
+                </div>
+                <input type="date" id="rating-custom-date" class="rating-date-picker" style="display:none;" onchange="onRatingDateChange(this)">
+            </div>
+
             <div class="card">
                 <h2>🚗 Рейтинг угонщиков (Фарм)</h2>
                 <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Машин за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-theft-cnt">Машин (за сегодня)</th><th id="th-theft-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead>
                     <tbody id="rating-theft-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -2218,7 +2335,7 @@
             <div class="card">
                 <h2>📦 Рейтинг закладчиков (Фарм)</h2>
                 <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Закладок за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-courier-cnt">Закладок (за сегодня)</th><th id="th-courier-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead>
                     <tbody id="rating-courier-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -2226,7 +2343,7 @@
             <div class="card">
                 <h2>🏠 Рейтинг ограбления домов (Фарм)</h2>
                 <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Ограблений за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-house-cnt">Ограблений (за сегодня)</th><th id="th-house-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead>
                     <tbody id="rating-house-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -2234,7 +2351,7 @@
             <div class="card">
                 <h2>📈 Рейтинг перекупов</h2>
                 <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Последняя проданная вещь</th><th>Выручка нетто</th><th>Чистая прибыль</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Последняя проданная вещь</th><th id="th-reseller-rev">Выручка (за сегодня)</th><th id="th-reseller-prof">Чистая прибыль (за сегодня)</th></tr></thead>
                     <tbody id="rating-reseller-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -2242,7 +2359,7 @@
             <div class="card">
                 <h2>🎰 Рейтинг казино (Кости)</h2>
                 <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Выиграно</th><th>Проиграно</th><th>Итоговый баланс</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-casino-win">Выиграно (за сегодня)</th><th id="th-casino-lose">Проиграно (за сегодня)</th><th id="th-casino-net">Баланс (за сегодня)</th></tr></thead>
                     <tbody id="rating-casino-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -2250,7 +2367,7 @@
             <div class="card">
                 <h2>💸 Статистика долгов</h2>
                 <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Должен другим</th><th>Должны ему</th><th>Чистый баланс</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-debts-owe">Должен (за сегодня)</th><th id="th-debts-oweme">Должны ему (за сегодня)</th><th id="th-debts-net">Баланс (за сегодня)</th></tr></thead>
                     <tbody id="rating-debts-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
