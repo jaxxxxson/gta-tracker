@@ -67,8 +67,11 @@
         .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px; padding: 20px; text-align: center; }
         .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--success); margin-top: 8px; }
         .timer-display { font-size: 1.4rem; color: var(--accent); margin: 12px 0; font-weight: 800; }
-        .auth-container { max-width: 420px; margin: 80px auto; }
-        .user-bar { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 22px; border-radius: 14px; border: 1px solid var(--card-border); margin-bottom: 25px; }
+        .auth-container { max-width: 440px; margin: 70px auto; }
+        .auth-mode-tabs { display: flex; gap: 8px; margin-bottom: 18px; background: rgba(3, 7, 18, 0.6); padding: 6px; border-radius: 14px; border: 1px solid var(--card-border); }
+        .auth-tab-btn { flex: 1; margin: 0; padding: 10px; border-radius: 10px; background: transparent; color: var(--text-muted); box-shadow: none; font-size: 0.95rem; }
+        .auth-tab-btn.active { background: var(--gold-gradient); color: #000; box-shadow: 0 2px 10px var(--accent-glow); }
+        .user-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: var(--card-bg); padding: 12px 22px; border-radius: 14px; border: 1px solid var(--card-border); margin-bottom: 25px; }
         .button-group { display: flex; gap: 12px; }
         .caught-row { color: var(--danger); }
         .delete-btn { background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; padding: 6px 10px; width: auto; margin: 0; box-shadow: none; }
@@ -82,7 +85,6 @@
         .ctrl-row { display: flex; align-items: center; gap: 10px; background: rgba(3, 7, 18, 0.45); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); margin-top: 8px; }
         .ctrl-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--accent); }
         .ctrl-row input[type="text"] { margin-top: 0; flex: 1; padding: 9px 12px; }
-        /* Компактное окно логов со скроллом и фильтрами */
         .logs-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
         .logs-toolbar select, .logs-toolbar input { margin-top: 0; padding: 10px 12px; font-size: 0.9rem; }
         .logs-scroll-box { max-height: 500px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 14px; background: rgba(3, 7, 18, 0.55); }
@@ -94,6 +96,7 @@
         .logs-pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; flex-wrap: wrap; font-size: 0.9rem; color: var(--text-muted); }
         .logs-pagination .page-btns { display: flex; gap: 8px; align-items: center; }
         .logs-pagination button { width: auto; margin-top: 0; padding: 8px 14px; font-size: 0.88rem; }
+        .static-badge { color: var(--accent); font-weight: 700; font-size: 0.86rem; margin-left: 4px; }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -161,6 +164,10 @@
         const defaultSiteConfig = {
             labels: {
                 siteTitle: "Помощник Россия Онлайн",
+                authCharNamePlaceholder: "Имя Фамилия персонажа (напр. Иван Иванов)",
+                authStaticPlaceholder: "Статик (напр. 12345)",
+                authLoginPlaceholder: "Логин (выданный для подписки)",
+                authPassPlaceholder: "Пароль",
                 tabPerekup: "📈 Перекуп",
                 tabFarm: "💰 Фарм",
                 tabCasino: "🎰 Казино",
@@ -216,11 +223,31 @@
 
         let siteConfig = JSON.parse(JSON.stringify(defaultSiteConfig));
         let currentUser = null, currentLogin = "";
-        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
+        let pendingRegistrationProfile = null;
+        let userData = { login: "", charName: "", staticId: "", history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
         let allUsersCache = [];
         let globalLogsCache = [];
         let adminLogsPage = 1;
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
+
+        // Отображение в Рейтинге: только Имя Фамилия и Статик (без логина)
+        function formatPublicPlayer(u) {
+            let name = (u.charName || "").trim();
+            let st = (u.staticId || "").trim().replace(/^#/, '');
+            if (name && st) return `<strong>${name}</strong> <span class="static-badge">#${st}</span>`;
+            if (name) return `<strong>${name}</strong>`;
+            if (st) return `<strong>Игрок</strong> <span class="static-badge">#${st}</span>`;
+            return `<strong>Не указан профиль</strong>`;
+        }
+
+        window.switchAuthMode = function(mode) {
+            let isReg = mode === 'register';
+            $('auth-tab-login').classList.toggle('active', !isReg);
+            $('auth-tab-register').classList.toggle('active', isReg);
+            $('reg-extra-fields').style.display = isReg ? 'block' : 'none';
+            $('btn-login').style.display = isReg ? 'none' : 'block';
+            $('btn-register').style.display = isReg ? 'block' : 'none';
+        };
 
         async function logAction(action, details = "") {
             if (!currentUser || !currentLogin) return;
@@ -284,6 +311,11 @@
             let L = siteConfig.labels, V = siteConfig.visibility, D = siteConfig.defaults;
 
             $('main-title-text').textContent = L.siteTitle;
+            if ($('auth-char-name')) $('auth-char-name').placeholder = L.authCharNamePlaceholder || "Имя Фамилия персонажа";
+            if ($('auth-static')) $('auth-static').placeholder = L.authStaticPlaceholder || "Статик (например: 12345)";
+            if ($('auth-login')) $('auth-login').placeholder = L.authLoginPlaceholder || "Логин";
+            if ($('auth-pass')) $('auth-pass').placeholder = L.authPassPlaceholder || "Пароль";
+
             const mapTextAndVis = [
                 ['nav-perekup', L.tabPerekup, V.tabPerekup],
                 ['nav-farm', L.tabFarm, V.tabFarm],
@@ -433,7 +465,7 @@
                 rCard.innerHTML = `
                     <h2>${sec.title} — Рейтинг</h2>
                     <table>
-                        <thead><tr><th>Логин игрока</th><th>За сегодня</th><th>Заработано сегодня</th><th>За всё время</th></tr></thead>
+                        <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>За сегодня</th><th>Заработано сегодня</th><th>За всё время</th></tr></thead>
                         <tbody id="dyn-rating-${sec.id}"><tr><td colspan="4" style="text-align:center;">Нет данных</td></tr></tbody>
                     </table>
                 `;
@@ -482,6 +514,9 @@
         };
 
         window.addEventListener('DOMContentLoaded', () => {
+            // Загружаем конфиг сразу, чтобы плейсхолдеры формы входа/регистрации применились на старте
+            loadSiteConfig();
+
             document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', e => { e.preventDefault(); switchTab(b.dataset.tab, true); }));
             document.querySelectorAll('.farm-sub').forEach(b => b.addEventListener('click', () => switchFarmSub(b.dataset.farmSub, b.textContent.trim())));
             document.querySelectorAll('.admin-sub').forEach(b => b.addEventListener('click', () => {
@@ -489,7 +524,7 @@
                 document.querySelectorAll('.admin-content').forEach(x => x.classList.remove('active'));
                 b.classList.add('active');
                 $('admin-sub-' + b.dataset.adminSub).classList.add('active');
-                if (b.dataset.adminSub === 'logs') loadGlobalRatings();
+                if (b.dataset.adminSub === 'logs' || b.dataset.adminSub === 'subs') loadGlobalRatings();
             }));
 
             window.addEventListener('popstate', () => {
@@ -506,7 +541,6 @@
             $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
             $('admin-level-picker').addEventListener('change', renderAdminCarsList);
 
-            // Фильтры и сортировка логов
             ['admin-log-user-filter', 'admin-log-type-filter', 'admin-log-sort', 'admin-log-limit'].forEach(id => {
                 $(id)?.addEventListener('change', () => { adminLogsPage = 1; renderAdminLogs(); });
             });
@@ -557,7 +591,6 @@
                     currentUser = user;
                     $('auth-section').style.display = 'none';
                     $('app-section').style.display = 'block';
-                    $('user-login').textContent = currentLogin;
                     $('nav-admin').style.display = currentLogin === ADMIN_LOGIN ? 'block' : 'none';
 
                     await loadUserData();
@@ -565,7 +598,7 @@
                     if (currentLogin === ADMIN_LOGIN) await loadAllowedUsers();
                     if (!subInterval) subInterval = setInterval(() => { updateSub(); updateTimers(); }, 1000);
                     updateSub();
-                    await logAction("Вход на сайт", "Открыта рабочая сессия");
+                    await logAction("Вход на сайт", `${userData.charName || currentLogin} (#${userData.staticId || '—'})`);
                     await loadGlobalRatings();
                     if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
                 } else {
@@ -604,7 +637,10 @@
                 } catch (e) { globalLogsCache = []; }
 
                 renderRatings(all);
-                if (currentLogin === ADMIN_LOGIN) renderAdminLogs();
+                if (currentLogin === ADMIN_LOGIN) {
+                    renderAdminUsersProfiles();
+                    renderAdminLogs();
+                }
             } catch (err) { console.error(err); }
         }
 
@@ -615,39 +651,40 @@
             list.forEach(u => {
                 let l = u.login;
                 if (!l || l.startsWith("Игрок_") || l === "Игрок" || l === "Неизвестный") return;
+                let pubName = formatPublicPlayer(u);
 
                 u.history?.forEach(x => {
                     if (x.status !== 'caught') {
-                        theft[l] = theft[l] || { c: 0, e: 0, tc: 0, te: 0 };
+                        theft[l] = theft[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                         theft[l].tc++; theft[l].te += (x.price || 0);
                         if ((x.date || today) === today) { theft[l].c++; theft[l].e += (x.price || 0); }
                     }
                 });
                 u.courierHistory?.forEach(x => {
-                    courier[l] = courier[l] || { c: 0, e: 0, tc: 0, te: 0 };
+                    courier[l] = courier[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                     courier[l].tc += (x.count || 0); courier[l].te += (x.earned || 0);
                     if ((x.date || today) === today) { courier[l].c += (x.count || 0); courier[l].e += (x.earned || 0); }
                 });
                 u.houseHistory?.forEach(x => {
-                    house[l] = house[l] || { c: 0, e: 0, tc: 0, te: 0 };
+                    house[l] = house[l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                     house[l].tc++; house[l].te += (x.amount || 0);
                     if ((x.date || today) === today) { house[l].c++; house[l].e += (x.amount || 0); }
                 });
                 u.resellerItems?.forEach(x => {
                     if (x.status === 'sold') {
-                        reseller[l] = reseller[l] || { items: [], p: 0, rev: 0 };
+                        reseller[l] = reseller[l] || { pubName, items: [], p: 0, rev: 0 };
                         let p = (x.sellPrice || 0) - (x.buyPrice || 0);
                         reseller[l].p += p; reseller[l].rev += (x.sellPrice || 0);
                         reseller[l].items.push({ name: x.name, buy: x.buyPrice, sell: x.sellPrice, p });
                     }
                 });
                 u.diceHistory?.forEach(x => {
-                    casino[l] = casino[l] || { w: 0, l: 0, net: 0 };
+                    casino[l] = casino[l] || { pubName, w: 0, l: 0, net: 0 };
                     if (x.result === 'win') { casino[l].w += (x.amount || 0); casino[l].net += (x.amount || 0); }
                     else { casino[l].l += (x.amount || 0); casino[l].net -= (x.amount || 0); }
                 });
                 u.debts?.forEach(x => {
-                    debts[l] = debts[l] || { iOwe: 0, owesMe: 0, net: 0 };
+                    debts[l] = debts[l] || { pubName, iOwe: 0, owesMe: 0, net: 0 };
                     if (x.type === 'i_owe') { debts[l].iOwe += (x.amount || 0); debts[l].net -= (x.amount || 0); }
                     else { debts[l].owesMe += (x.amount || 0); debts[l].net += (x.amount || 0); }
                 });
@@ -656,7 +693,7 @@
                     Object.keys(u.customRecords).forEach(secId => {
                         customMap[secId] = customMap[secId] || {};
                         u.customRecords[secId].forEach(r => {
-                            customMap[secId][l] = customMap[secId][l] || { c: 0, e: 0, tc: 0, te: 0 };
+                            customMap[secId][l] = customMap[secId][l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                             customMap[secId][l].tc += (r.count || 1);
                             customMap[secId][l].te += (r.amount || 0);
                             if ((r.date || today) === today) {
@@ -673,24 +710,54 @@
                 renderList(id, arr, "Нет данных", 4, rowBuilder);
             };
 
-            fillTable('rating-theft-list', theft, 'e', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-courier-list', courier, 'e', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
-            fillTable('rating-house-list', house, 'e', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
+            // В Рейтинге выводится ТОЛЬКО Имя Фамилия и #Статик (i.pubName), логин скрыт
+            fillTable('rating-theft-list', theft, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
+            fillTable('rating-courier-list', courier, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
+            fillTable('rating-house-list', house, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
             fillTable('rating-reseller-list', reseller, 'p', (i, idx) => {
                 let last = i.items[0] ? `${i.items[0].name} (куп: ${fmt(i.items[0].buy)} ₽, прод: ${fmt(i.items[0].sell)} ₽)` : "Нет продаж";
-                return `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td>${last}</td><td style="color:var(--accent);">${fmt(i.rev)} ₽</td><td style="color:${i.p >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.p)} ₽</td></tr>`;
+                return `<tr><td>#${idx + 1} ${i.pubName}</td><td>${last}</td><td style="color:var(--accent);">${fmt(i.rev)} ₽</td><td style="color:${i.p >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.p)} ₽</td></tr>`;
             });
-            fillTable('rating-casino-list', casino, 'net', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td style="color:var(--success);">+${fmt(i.w)} ₽</td><td style="color:var(--danger);">-${fmt(i.l)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
-            fillTable('rating-debts-list', debts, 'net', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
+            fillTable('rating-casino-list', casino, 'net', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--success);">+${fmt(i.w)} ₽</td><td style="color:var(--danger);">-${fmt(i.l)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
+            fillTable('rating-debts-list', debts, 'net', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
 
             (siteConfig.customSections || []).forEach(sec => {
                 fillTable(`dyn-rating-${sec.id}`, customMap[sec.id] || {}, 'e', (i, idx) => `
-                    <tr><td>#${idx + 1} <strong>${i.login}</strong></td><td>${i.c} (${i.tc} всего)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>
+                    <tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} (${i.tc} всего)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>
                 `);
             });
         }
 
-        // ==================== АДМИН-РЕДАКТОР И ЛОГИ ====================
+        // ==================== АДМИН-РЕДАКТОР ПРОФИЛЕЙ, РАЗДЕЛОВ И ЛОГОВ ====================
+        function renderAdminUsersProfiles() {
+            let sorted = [...allUsersCache].sort((a, b) => (a.login || "").localeCompare(b.login || ""));
+            renderList('admin-users-profiles-list', sorted, "Нет зарегистрированных пользователей", 4, (u, idx) => `
+                <tr>
+                    <td><strong style="color:var(--accent);">${u.login}</strong></td>
+                    <td><input type="text" class="inline-input" id="adm-prof-name-${idx}" value="${u.charName || ''}" placeholder="Имя Фамилия"></td>
+                    <td><input type="text" class="inline-input" id="adm-prof-static-${idx}" value="${u.staticId || ''}" placeholder="Статик"></td>
+                    <td style="text-align:right;">
+                        <button type="button" style="width:auto;padding:6px 12px;font-size:0.82rem;margin:0;" onclick="adminSaveUserProfile('${u.uid}', ${idx})">💾 Сохранить</button>
+                    </td>
+                </tr>
+            `);
+        }
+
+        window.adminSaveUserProfile = async function(uid, idx) {
+            let charName = $(`adm-prof-name-${idx}`)?.value.trim() || "";
+            let staticId = $(`adm-prof-static-${idx}`)?.value.trim().replace(/^#/, '') || "";
+            try {
+                await setDoc(doc(db, "users", uid), { charName, staticId }, { merge: true });
+                if (currentUser && currentUser.uid === uid) {
+                    userData.charName = charName;
+                    userData.staticId = staticId;
+                    renderState();
+                }
+                await loadGlobalRatings();
+                showToast("Данные персонажа (Имя и Статик) обновлены!");
+            } catch (e) { showToast("Ошибка: " + e.message, "error"); }
+        };
+
         function renderAdminEditor() {
             let picker = $('admin-level-picker'), prev = picker.value;
             picker.innerHTML = '';
@@ -700,6 +767,10 @@
 
             let L = siteConfig.labels, V = siteConfig.visibility, D = siteConfig.defaults;
             $('adm-lbl-title').value = L.siteTitle || "";
+            $('adm-ph-charname').value = L.authCharNamePlaceholder || "";
+            $('adm-ph-static').value = L.authStaticPlaceholder || "";
+            $('adm-ph-login').value = L.authLoginPlaceholder || "";
+            $('adm-ph-pass').value = L.authPassPlaceholder || "";
 
             const bindCtrl = (key) => {
                 if ($(`adm-lbl-${key}`)) $(`adm-lbl-${key}`).value = L[key] || "";
@@ -864,6 +935,11 @@
 
         async function adminSaveLabelsAndBonuses() {
             siteConfig.labels.siteTitle = $('adm-lbl-title').value.trim() || "Помощник Россия Онлайн";
+            siteConfig.labels.authCharNamePlaceholder = $('adm-ph-charname').value.trim() || defaultSiteConfig.labels.authCharNamePlaceholder;
+            siteConfig.labels.authStaticPlaceholder = $('adm-ph-static').value.trim() || defaultSiteConfig.labels.authStaticPlaceholder;
+            siteConfig.labels.authLoginPlaceholder = $('adm-ph-login').value.trim() || defaultSiteConfig.labels.authLoginPlaceholder;
+            siteConfig.labels.authPassPlaceholder = $('adm-ph-pass').value.trim() || defaultSiteConfig.labels.authPassPlaceholder;
+
             ['tabPerekup', 'tabFarm', 'tabCasino', 'tabDebts', 'tabRating', 'subCabinet', 'subProperty', 'subLedger', 'subAnalytics', 'subTheft', 'subCourier', 'subHouse'].forEach(k => {
                 if ($(`adm-lbl-${k}`)) siteConfig.labels[k] = $(`adm-lbl-${k}`).value.trim() || defaultSiteConfig.labels[k];
                 if ($(`adm-vis-${k}`)) siteConfig.visibility[k] = $(`adm-vis-${k}`).checked;
@@ -882,10 +958,9 @@
 
             let bonuses = $('adm-wheel-bonuses').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x) && x > 0);
             if (bonuses.length) siteConfig.wheelBonuses = bonuses;
-            await saveSiteConfigToDb("Все кнопки, разделы, видимость и цены сохранены!");
+            await saveSiteConfigToDb("Все кнопки, поля регистрации, разделы и стоимости сохранены!");
         }
 
-        // Парсер русской даты и времени в миллисекунды для точной хронологической сортировки
         function parseRuDateTime(dateStr, timeStr, fallbackId = 0) {
             if (fallbackId && fallbackId > 1600000000000 && fallbackId < 2500000000000) return fallbackId;
             if (!dateStr || dateStr === '—') return fallbackId || 0;
@@ -899,7 +974,6 @@
             return dt.getTime() || fallbackId || 0;
         }
 
-        // Определение категории лога для удобной фильтрации
         function getLogCategory(action = "") {
             let a = action.toLowerCase();
             if (a.includes('угон') || a.includes('авто')) return 'theft';
@@ -907,7 +981,7 @@
             if (a.includes('заклад') || a.includes('дом') || a.includes('csec_')) return 'farm_other';
             if (a.includes('казино') || a.includes('кости')) return 'casino';
             if (a.includes('долг')) return 'debts';
-            return 'nav'; // Переходы по вкладкам, входы, клики
+            return 'nav';
         }
 
         function renderAdminLogs() {
@@ -921,7 +995,7 @@
             let selectedUser = filterSel.value;
             let selectedType = $('admin-log-type-filter')?.value || 'all';
             let sortOrder = $('admin-log-sort')?.value || 'time_desc';
-            let pageSize = parseInt($('admin-log-limit')?.value) || 30;
+            let pageSize = parseInt($('admin-log-limit')?.value) || 50;
             let searchQuery = ($('admin-log-search')?.value || '').trim().toLowerCase();
 
             let combined = [];
@@ -969,7 +1043,7 @@
                     );
                 }
 
-                (u.history || []).forEach((h, i) => {
+                (u.history || []).forEach(h => {
                     pushUnique(
                         l, h.id || 0, h.date, h.time,
                         h.status === 'caught' ? "🚓 Провал угона (полиция)" : "🚗 Сдача авто (Угонщик)",
@@ -1019,7 +1093,6 @@
                 });
             });
 
-            // Сортировка
             combined.sort((a, b) => {
                 if (sortOrder === 'time_desc') return (b.ts || 0) - (a.ts || 0);
                 if (sortOrder === 'time_asc') return (a.ts || 0) - (b.ts || 0);
@@ -1184,19 +1257,27 @@
                 : `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(basePrice)} ₽</strong>`;
         }
 
+        // Авторизация (по логину и паролю) и Регистрация (Имя Фамилия + Статик + Логин + Пароль, по подписке на логин)
         async function authAction(isReg) {
             let l = $('auth-login').value.trim().toLowerCase(), p = $('auth-pass').value;
-            if (!l) return showToast("Введите логин!", "error");
+            if (!l || !p) return showToast("Введите логин и пароль!", "error");
             try {
                 if (isReg) {
+                    let charName = $('auth-char-name').value.trim();
+                    let staticId = $('auth-static').value.trim().replace(/^#/, '');
+                    if (!charName || !staticId) return showToast("Заполните Имя Фамилию персонажа и Статик!", "error");
+
                     let snap = await getDoc(doc(db, "system", "config"));
                     let map = snap.exists() ? (snap.data().allowedUsersMap || {}) : {};
-                    if (l !== ADMIN_LOGIN && (!map[l] || Date.now() > map[l])) return showToast("Нет активной подписки для этого логина!", "error");
+                    if (l !== ADMIN_LOGIN && (!map[l] || Date.now() > map[l])) {
+                        return showToast("Для этого логина нет активной подписки!", "error");
+                    }
+                    pendingRegistrationProfile = { charName, staticId };
                     await createUserWithEmailAndPassword(auth, loginToEmail(l), p);
                 } else {
                     await signInWithEmailAndPassword(auth, loginToEmail(l), p);
                 }
-            } catch (e) { showToast(isReg ? "Ошибка: " + e.message : "Неверный логин или пароль!", "error"); }
+            } catch (e) { showToast(isReg ? "Ошибка регистрации: " + e.message : "Неверный логин или пароль!", "error"); }
         }
 
         async function loadUserData() {
@@ -1205,10 +1286,21 @@
             if (snap.exists()) {
                 userData = snap.data();
                 userData.login = currentLogin;
+                if (pendingRegistrationProfile) {
+                    userData.charName = pendingRegistrationProfile.charName;
+                    userData.staticId = pendingRegistrationProfile.staticId;
+                    pendingRegistrationProfile = null;
+                }
                 ['history', 'resellerItems', 'diceHistory', 'courierHistory', 'houseHistory', 'debts', 'activityLogs'].forEach(k => { if (!userData[k]) userData[k] = []; });
                 if (!userData.customRecords) userData.customRecords = {};
             } else {
-                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
+                userData = {
+                    login: currentLogin,
+                    charName: pendingRegistrationProfile?.charName || (currentLogin === ADMIN_LOGIN ? "Администратор" : ""),
+                    staticId: pendingRegistrationProfile?.staticId || "",
+                    history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: []
+                };
+                pendingRegistrationProfile = null;
             }
             await saveUserData();
             renderState();
@@ -1371,6 +1463,10 @@
         }
 
         function renderState() {
+            // Шапка профиля игрока
+            let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : currentLogin;
+            if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${currentLogin}]</small>`;
+
             if (userData.activeTheft) {
                 $('active-panel').style.display = 'block';
                 $('start-panel').style.display = 'none';
@@ -1478,16 +1574,26 @@
     <h1><b id="main-title-text" style="font-weight:800;">Помощник Россия Онлайн</b> <span>by jaxxxxson</span></h1>
 
     <div id="auth-section" class="card auth-container">
-        <h2>Вход / Регистрация</h2>
+        <div class="auth-mode-tabs">
+            <button type="button" id="auth-tab-login" class="auth-tab-btn active" onclick="switchAuthMode('login')">🔑 Вход</button>
+            <button type="button" id="auth-tab-register" class="auth-tab-btn" onclick="switchAuthMode('register')">📝 Регистрация</button>
+        </div>
+
+        <div id="reg-extra-fields" style="display:none;">
+            <input type="text" id="auth-char-name" placeholder="Имя Фамилия персонажа (напр. Иван Иванов)">
+            <input type="text" id="auth-static" placeholder="Статик (напр. 12345)">
+        </div>
+
         <input type="text" id="auth-login" placeholder="Логин">
         <input type="password" id="auth-pass" placeholder="Пароль">
-        <button id="btn-login">Войти</button>
-        <button id="btn-register" class="secondary">Зарегистрироваться</button>
+
+        <button id="btn-login" style="margin-top:16px;">Войти в аккаунт</button>
+        <button id="btn-register" style="display:none; margin-top:16px;">Зарегистрироваться</button>
     </div>
 
     <div id="app-section" style="display:none;">
         <div class="user-bar">
-            <div>Логин: <strong id="user-login"></strong></div>
+            <div>Персонаж: <strong id="user-login"></strong></div>
             <div>Подписка: <span id="sub-countdown" style="color: var(--success); font-weight: bold;">--</span></div>
             <button id="btn-logout" class="danger" style="width: auto; padding: 6px 14px; margin: 0;">Выйти</button>
         </div>
@@ -1505,18 +1611,18 @@
         <div id="tab-admin" class="tab-content">
             <div class="sub-tabs">
                 <div class="sub-tabs-links">
-                    <button type="button" class="sub-btn admin-sub active" data-admin-sub="subs">🔑 Подписки</button>
+                    <button type="button" class="sub-btn admin-sub active" data-admin-sub="subs">🔑 Подписки и Игроки</button>
                     <button type="button" class="sub-btn admin-sub" data-admin-sub="cars">🚗 Авто и Уровни</button>
                     <button type="button" class="sub-btn admin-sub" data-admin-sub="fields">🗂 Разделы, Кнопки и Цены</button>
                     <button type="button" class="sub-btn admin-sub" data-admin-sub="logs">📋 Логи игроков</button>
                 </div>
             </div>
 
-            <!-- Админ 1: Подписки -->
+            <!-- Админ 1: Подписки и профили игроков -->
             <div id="admin-sub-subs" class="admin-content active">
                 <div class="card admin-card">
-                    <h2>🔑 Управление подписками</h2>
-                    <input type="text" id="new-allowed-login" placeholder="Логин пользователя">
+                    <h2>🔑 Выдача подписки по логину (разрешение на регистрацию и вход)</h2>
+                    <input type="text" id="new-allowed-login" placeholder="Логин пользователя (по нему игрок сможет зарегистрироваться)">
                     <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок (в днях):</label>
                     <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
                     <button id="btn-add-allowed">Выдать / продлить доступ</button>
@@ -1524,6 +1630,15 @@
                     <table>
                         <thead><tr><th>Логин</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
                         <tbody id="allowed-list"><tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div class="card admin-card">
+                    <h2>👤 Зарегистрированные игроки (Редактор Имени Фамилии и Статика)</h2>
+                    <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0;">Здесь вы можете изменить Имя Фамилию персонажа и Статик любого игрока (именно эти данные отображаются в «Рейтинге»):</p>
+                    <table>
+                        <thead><tr><th style="width:140px;">Логин входа</th><th>Имя Фамилия персонажа</th><th style="width:140px;">Статик</th><th style="width:130px;">Действие</th></tr></thead>
+                        <tbody id="admin-users-profiles-list"><tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -1619,9 +1734,17 @@
                 </div>
 
                 <div class="card admin-card">
-                    <h2>🎛 Управление всеми вкладками, кнопками и ценами по умолчанию</h2>
+                    <h2>🎛 Управление всеми вкладками, полями регистрации, кнопками и ценами</h2>
                     <label style="font-size:0.85rem; color:var(--text-muted);">Главный заголовок сайта:</label>
                     <input type="text" id="adm-lbl-title">
+
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Поля формы Входа и Регистрации:</h3>
+                    <div class="grid-2">
+                        <div><small style="color:var(--text-muted);">Поле 1 (Имя Фамилия персонажа):</small><input type="text" id="adm-ph-charname"></div>
+                        <div><small style="color:var(--text-muted);">Поле 2 (Статик):</small><input type="text" id="adm-ph-static"></div>
+                        <div><small style="color:var(--text-muted);">Поле 3 (Логин):</small><input type="text" id="adm-ph-login"></div>
+                        <div><small style="color:var(--text-muted);">Поле 4 (Пароль):</small><input type="text" id="adm-ph-pass"></div>
+                    </div>
 
                     <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Главные вкладки (галочка — показывать/скрыть вкладку):</h3>
                     <div class="grid-2">
@@ -1711,7 +1834,7 @@
 
                     <div class="logs-scroll-box">
                         <table>
-                            <thead><tr><th style="width:135px;">Дата / Время</th><th style="width:115px;">Игрок</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
+                            <thead><tr><th style="width:135px;">Дата / Время</th><th style="width:115px;">Логин</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
                             <tbody id="admin-logs-list"><tr><td colspan="4" style="text-align:center;">Загрузка логов...</td></tr></tbody>
                         </table>
                     </div>
@@ -1955,12 +2078,12 @@
             </div>
         </div>
 
-        <!-- Раздел Рейтинг -->
+        <!-- Раздел Рейтинг (Отображаются ТОЛЬКО Имя Фамилия и Статик) -->
         <div id="tab-rating" class="tab-content">
             <div class="card">
                 <h2>🚗 Рейтинг угонщиков (Фарм)</h2>
                 <table>
-                    <thead><tr><th>Логин игрока</th><th>Машин за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Машин за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
                     <tbody id="rating-theft-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -1968,7 +2091,7 @@
             <div class="card">
                 <h2>📦 Рейтинг закладчиков (Фарм)</h2>
                 <table>
-                    <thead><tr><th>Логин игрока</th><th>Закладок за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Закладок за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
                     <tbody id="rating-courier-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -1976,7 +2099,7 @@
             <div class="card">
                 <h2>🏠 Рейтинг ограбления домов (Фарм)</h2>
                 <table>
-                    <thead><tr><th>Логин игрока</th><th>Ограблений за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Ограблений за сегодня</th><th>Заработано за сегодня</th><th>Всего за всё время</th></tr></thead>
                     <tbody id="rating-house-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -1984,7 +2107,7 @@
             <div class="card">
                 <h2>📈 Рейтинг перекупов</h2>
                 <table>
-                    <thead><tr><th>Логин игрока</th><th>Последняя проданная вещь</th><th>Выручка нетто</th><th>Чистая прибыль</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Последняя проданная вещь</th><th>Выручка нетто</th><th>Чистая прибыль</th></tr></thead>
                     <tbody id="rating-reseller-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -1992,7 +2115,7 @@
             <div class="card">
                 <h2>🎰 Рейтинг казино (Кости)</h2>
                 <table>
-                    <thead><tr><th>Логин игрока</th><th>Выиграно</th><th>Проиграно</th><th>Итоговый баланс</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Выиграно</th><th>Проиграно</th><th>Итоговый баланс</th></tr></thead>
                     <tbody id="rating-casino-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
@@ -2000,7 +2123,7 @@
             <div class="card">
                 <h2>💸 Статистика долгов</h2>
                 <table>
-                    <thead><tr><th>Логин игрока</th><th>Должен другим</th><th>Должны ему</th><th>Чистый баланс</th></tr></thead>
+                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Должен другим</th><th>Должны ему</th><th>Чистый баланс</th></tr></thead>
                     <tbody id="rating-debts-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
                 </table>
             </div>
