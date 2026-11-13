@@ -105,6 +105,7 @@
 
         const $ = (id) => document.getElementById(id);
         const fmt = (n) => (Number(n) || 0).toLocaleString('ru-RU');
+        const sumBy = (arr, fn) => arr.reduce((s, x) => s + (fn(x) || 0), 0);
         const loginToEmail = (l) => l.trim().toLowerCase() + "@gta-tracker.local";
         const isNight = (d = new Date()) => { let m = d.getHours() * 60 + d.getMinutes(); return m >= 60 && m < 540; };
         const getMskNow = () => {
@@ -118,6 +119,10 @@
         const renderList = (id, arr, emptyMsg, cols, fn) => {
             let el = $(id);
             if (el) el.innerHTML = arr.length ? arr.map(fn).join('') : `<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);">${emptyMsg}</td></tr>`;
+        };
+        const setSignedVal = (id, val) => {
+            let el = $(id);
+            if (el) { el.textContent = fmt(val) + ' ₽'; el.style.color = val >= 0 ? 'var(--success)' : 'var(--danger)'; }
         };
 
         window.showToast = function(msg, type = 'success') {
@@ -141,8 +146,8 @@
             car20("Leslie Ayrton"), car20("Leslie P1"), car20("Maranello 488", 32725, 23375),
             car20("Maranello F12 Verleenetta", 41650, 28325), car20("Maranello FXX-K"), car20("Maranello Timucua SP3"),
             car20("Molsheim Atlantick"), car20("Molsheim Formula"), car20("Molsheim Shiron"),
-            car20("Molsheim Vivo"), car20("Wayn GT"), car20("Wurttem 918 Spyder"),
-            car20("York Bamford DBX", 45500, 32500)
+            car20("Molsheim Vivo"), car20("Molsheim Weyron"), car20("Wayn GT"),
+            car20("Wurttem 918 Spyder"), car20("York Bamford DBX", 45500, 32500)
         ].sort((a, b) => a.name.localeCompare(b.name));
 
         let currentUser = null, currentLogin = "";
@@ -181,21 +186,24 @@
             levelSel.addEventListener('change', updateCarList);
             carSel.addEventListener('change', updateCarInfo);
             $('wheel-bonus-select').addEventListener('change', updateCarInfo);
+            $('reseller-sort').addEventListener('change', renderState);
             updateCarList();
 
-            $('reseller-sort').addEventListener('change', renderState);
-            $('btn-login').addEventListener('click', login);
-            $('btn-register').addEventListener('click', register);
-            $('btn-logout').addEventListener('click', () => signOut(auth));
-            $('btn-start').addEventListener('click', startTheft);
-            $('btn-finish').addEventListener('click', finishTheft);
-            $('btn-caught').addEventListener('click', caughtByPolice);
-            $('btn-add-allowed').addEventListener('click', addAllowedUser);
-            $('btn-add-reseller-item').addEventListener('click', addResellerItem);
-            $('btn-add-dice').addEventListener('click', addDiceGame);
-            $('btn-add-courier').addEventListener('click', addCourierRecord);
-            $('btn-add-house').addEventListener('click', addHouseRecord);
-            $('btn-add-debt').addEventListener('click', addDebtRecord);
+            const clicks = {
+                'btn-login': () => authAction(false),
+                'btn-register': () => authAction(true),
+                'btn-logout': () => signOut(auth),
+                'btn-start': startTheft,
+                'btn-finish': () => endTheft(false),
+                'btn-caught': () => endTheft(true),
+                'btn-add-allowed': addAllowedUser,
+                'btn-add-reseller-item': addResellerItem,
+                'btn-add-dice': addDiceGame,
+                'btn-add-courier': addCourierRecord,
+                'btn-add-house': addHouseRecord,
+                'btn-add-debt': addDebtRecord
+            };
+            Object.entries(clicks).forEach(([id, fn]) => $(id)?.addEventListener('click', fn));
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -415,22 +423,19 @@
                 : `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(basePrice)} ₽</strong>`;
         }
 
-        async function register() {
+        async function authAction(isReg) {
             let l = $('auth-login').value.trim().toLowerCase(), p = $('auth-pass').value;
             if (!l) return showToast("Введите логин!", "error");
             try {
-                let snap = await getDoc(doc(db, "system", "config"));
-                let map = snap.exists() ? (snap.data().allowedUsersMap || {}) : {};
-                if (l !== ADMIN_LOGIN && (!map[l] || Date.now() > map[l])) return showToast("Нет активной подписки для этого логина!", "error");
-                await createUserWithEmailAndPassword(auth, loginToEmail(l), p);
-            } catch (e) { showToast("Ошибка: " + e.message, "error"); }
-        }
-
-        async function login() {
-            let l = $('auth-login').value.trim().toLowerCase(), p = $('auth-pass').value;
-            if (!l) return showToast("Введите логин!", "error");
-            try { await signInWithEmailAndPassword(auth, loginToEmail(l), p); }
-            catch (e) { showToast("Неверный логин или пароль!", "error"); }
+                if (isReg) {
+                    let snap = await getDoc(doc(db, "system", "config"));
+                    let map = snap.exists() ? (snap.data().allowedUsersMap || {}) : {};
+                    if (l !== ADMIN_LOGIN && (!map[l] || Date.now() > map[l])) return showToast("Нет активной подписки для этого логина!", "error");
+                    await createUserWithEmailAndPassword(auth, loginToEmail(l), p);
+                } else {
+                    await signInWithEmailAndPassword(auth, loginToEmail(l), p);
+                }
+            } catch (e) { showToast(isReg ? "Ошибка: " + e.message : "Неверный логин или пароль!", "error"); }
         }
 
         async function loadUserData() {
@@ -453,11 +458,17 @@
             await setDoc(doc(db, "users", currentUser.uid), userData, { merge: true });
         }
 
+        async function commitChange(msg, type = 'success', refreshRatings = true) {
+            await saveUserData();
+            renderState();
+            if (refreshRatings) await loadGlobalRatings();
+            if (msg) showToast(msg, type);
+        }
+
         window.deleteRecord = async function(collectionKey, id, isIndex = false) {
             if (isIndex) userData[collectionKey].splice(id, 1);
             else userData[collectionKey] = userData[collectionKey].filter(x => x.id !== id);
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast("Запись удалена", "error");
+            await commitChange("Запись удалена", "error");
         };
 
         async function addHouseRecord() {
@@ -465,8 +476,7 @@
             if (amount <= 0) return showToast("Введите корректную сумму ограбления!", "error");
             userData.houseHistory.unshift({ id: Date.now(), amount, ...getMskNow() });
             $('house-amount').value = "";
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast(`Ограбление дома учтено: +${fmt(amount)} ₽`);
+            await commitChange(`Ограбление дома учтено: +${fmt(amount)} ₽`);
         }
 
         async function addResellerItem() {
@@ -476,8 +486,7 @@
 
             userData.resellerItems.unshift({ id: Date.now(), name, buyPrice, sellPrice: 0, isRedemption, owner: isRedemption ? owner : "", startTime: Date.now(), status: "active" });
             $('res-name').value = ""; $('res-buy').value = ""; $('res-redemption').checked = false; $('res-owner').value = ""; $('res-owner-box').style.display = 'none';
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast("Вещь добавлена в учет!");
+            await commitChange("Вещь добавлена в учет!");
         }
 
         window.toggleRedemptionBox = (cb) => { $('res-owner-box').style.display = cb.checked ? 'block' : 'none'; };
@@ -491,9 +500,8 @@
             if (isNaN(sellPrice)) return showToast("Некорректная сумма!", "error");
 
             item.sellPrice = sellPrice; item.status = "sold"; item.soldTime = Date.now();
-            await saveUserData(); renderState(); await loadGlobalRatings();
             let profit = sellPrice - item.buyPrice;
-            showToast(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error");
+            await commitChange(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error");
         };
 
         async function addDebtRecord() {
@@ -501,8 +509,7 @@
             if (!person || amount <= 0) return showToast("Заполните имя и сумму долга!", "error");
             userData.debts.unshift({ id: Date.now(), person, amount, type, ...getMskNow() });
             $('debt-person').value = ""; $('debt-amount').value = "";
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast("Долг записан!");
+            await commitChange("Долг записан!");
         }
 
         async function addCourierRecord() {
@@ -511,8 +518,7 @@
             let earned = count * pricePerOne;
             userData.courierHistory.unshift({ id: Date.now(), count, pricePerOne, earned, ...getMskNow() });
             $('courier-count').value = ""; $('courier-price').value = "";
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast(`Закладки учтены: +${fmt(earned)} ₽`);
+            await commitChange(`Закладки учтены: +${fmt(earned)} ₽`);
         }
 
         async function addDiceGame() {
@@ -520,8 +526,7 @@
             if (amount <= 0) return showToast("Введите сумму ставки!", "error");
             userData.diceHistory.unshift({ id: Date.now(), result, amount, ...getMskNow() });
             $('dice-amount').value = "";
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast(result === 'win' ? `Победа: +${fmt(amount)} ₽` : `Проигрыш: -${fmt(amount)} ₽`, result === 'win' ? 'success' : 'error');
+            await commitChange(result === 'win' ? `Победа: +${fmt(amount)} ₽` : `Проигрыш: -${fmt(amount)} ₽`, result === 'win' ? 'success' : 'error');
         }
 
         async function startTheft() {
@@ -543,35 +548,29 @@
                     userData.activeTheft = { level: '7', carName: car.name, bonusPercent: getActiveBonusPercent(), startTime: Date.now() };
                 }
             }
-            await saveUserData(); renderState();
-            showToast(`Угон начат: ${userData.activeTheft.carName}`);
+            await commitChange(`Угон начат: ${userData.activeTheft.carName}`, "success", false);
         }
 
-        async function finishTheft() {
+        async function endTheft(caught = false) {
             if (!userData.activeTheft) return;
             let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
             let { carName: name, level, customPrice, bonusPercent } = userData.activeTheft;
-            let bonusPct = bonusPercent || 0;
+            let bonusPct = bonusPercent || 0, duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
+
+            if (caught) {
+                userData.history.unshift({ name, level, duration, price: 0, status: 'caught', ...getMskNow() });
+                userData.activeTheft = null;
+                return commitChange("Поймали менты (0 ₽)", "error", false);
+            }
 
             let price = (level !== '7' || customPrice)
                 ? (customPrice || 0)
                 : Math.round(((level7Cars.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0) * (1 + bonusPct / 100));
 
             let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice && level === '7' ? `${name} (своя цена)` : name);
-
-            userData.history.unshift({ name: displayCarName, level, duration: `${Math.floor(sec / 60)} мин ${sec % 60} сек`, price, status: 'success', ...getMskNow() });
+            userData.history.unshift({ name: displayCarName, level, duration, price, status: 'success', ...getMskNow() });
             userData.activeTheft = null;
-            await saveUserData(); renderState(); await loadGlobalRatings();
-            showToast(`Авто сдано! +${fmt(price)} ₽`);
-        }
-
-        async function caughtByPolice() {
-            if (!userData.activeTheft) return;
-            let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
-            userData.history.unshift({ name: userData.activeTheft.carName, level: userData.activeTheft.level, duration: `${Math.floor(sec / 60)} мин ${sec % 60} сек`, price: 0, status: 'caught', ...getMskNow() });
-            userData.activeTheft = null;
-            await saveUserData(); renderState();
-            showToast("Поймали менты (0 ₽)", "error");
+            await commitChange(`Авто сдано! +${fmt(price)} ₽`);
         }
 
         function updateTimers() {
@@ -611,7 +610,7 @@
             let today = getMskNow().date;
             let todayH = userData.history.filter(h => (h.date || today) === today && h.status !== 'caught');
             $('today-count').textContent = todayH.length;
-            $('today-earned').textContent = fmt(todayH.reduce((s, h) => s + h.price, 0)) + ' ₽';
+            $('today-earned').textContent = fmt(sumBy(todayH, h => h.price)) + ' ₽';
 
             let histTbody = $('history-list');
             if (userData.history.length === 0) {
@@ -624,8 +623,7 @@
                 });
                 histTbody.innerHTML = Object.keys(grouped).map(day => {
                     let daySucc = grouped[day].filter(g => g.item.status !== 'caught');
-                    let dayEarned = daySucc.reduce((s, g) => s + g.item.price, 0);
-                    let rows = `<tr class="day-header"><td colspan="5">📅 ${day} | Успешных: ${daySucc.length} | Заработано: ${fmt(dayEarned)} ₽</td></tr>`;
+                    let rows = `<tr class="day-header"><td colspan="5">📅 ${day} | Успешных: ${daySucc.length} | Заработано: ${fmt(sumBy(daySucc, g => g.item.price))} ₽</td></tr>`;
                     return rows + grouped[day].map(({ item: i, globalIndex: idx }) => {
                         let title = i.name.includes('ур.') ? i.name : `${i.name} (${i.level} ур.)`;
                         return `<tr class="${i.status === 'caught' ? 'caught-row' : ''}"><td>${title}</td><td>${i.time}</td><td>${i.duration}</td><td>${i.status === 'caught' ? 'Поймали менты (0 ₽)' : fmt(i.price) + ' ₽'}</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('history', ${idx}, true)">✕</button></td></tr>`;
@@ -636,13 +634,11 @@
             let items = sortResellerArray(userData.resellerItems || []);
             let active = items.filter(i => i.status === 'active'), sold = items.filter(i => i.status === 'sold');
 
-            $('res-cabinet-capital').textContent = fmt(active.reduce((s, i) => s + i.buyPrice, 0)) + ' ₽';
-            let net = sold.reduce((s, i) => s + (i.sellPrice - i.buyPrice), 0);
-            ['res-cabinet-profit', 'res-analyst-profit'].forEach(id => {
-                $(id).textContent = fmt(net) + ' ₽';
-                $(id).style.color = net >= 0 ? 'var(--success)' : 'var(--danger)';
-            });
-            $('res-analyst-revenue').textContent = fmt(sold.reduce((s, i) => s + i.sellPrice, 0)) + ' ₽';
+            $('res-cabinet-capital').textContent = fmt(sumBy(active, i => i.buyPrice)) + ' ₽';
+            let net = sumBy(sold, i => i.sellPrice - i.buyPrice);
+            setSignedVal('res-cabinet-profit', net);
+            setSignedVal('res-analyst-profit', net);
+            $('res-analyst-revenue').textContent = fmt(sumBy(sold, i => i.sellPrice)) + ' ₽';
 
             const fDate = (ts) => ts ? new Date(ts).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '--';
             const resActions = (id) => `<td style="text-align:right;"><button style="padding:6px 10px;font-size:0.8rem;width:auto;margin-top:0;" onclick="sellResellerItem(${id})">Продать</button><button class="delete-btn" onclick="deleteRecord('resellerItems', ${id})">✕</button></td>`;
@@ -661,29 +657,29 @@
             });
 
             let cList = userData.courierHistory || [], todayC = cList.filter(c => (c.date || today) === today);
-            $('courier-today-count').textContent = todayC.reduce((s, c) => s + c.count, 0);
-            $('courier-today-earned').textContent = fmt(todayC.reduce((s, c) => s + c.earned, 0)) + ' ₽';
+            $('courier-today-count').textContent = sumBy(todayC, c => c.count);
+            $('courier-today-earned').textContent = fmt(sumBy(todayC, c => c.earned)) + ' ₽';
             renderList('courier-history-list', cList, "История закладок пуста", 5, i => `
                 <tr><td>${i.date} ${i.time}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">${fmt(i.earned)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('courierHistory', ${i.id})">✕</button></td></tr>
             `);
 
             let hList = userData.houseHistory || [], todayHList = hList.filter(h => (h.date || today) === today);
-            $('house-today-earned').textContent = fmt(todayHList.reduce((s, h) => s + h.amount, 0)) + ' ₽';
+            $('house-today-earned').textContent = fmt(sumBy(todayHList, h => h.amount)) + ' ₽';
             renderList('house-history-list', hList, "История ограблений пуста", 3, i => `
                 <tr><td>${i.date} ${i.time}</td><td style="color:var(--success);font-weight:bold;">${fmt(i.amount)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('houseHistory', ${i.id})">✕</button></td></tr>
             `);
 
             let dice = userData.diceHistory || [];
-            let dw = dice.filter(d => d.result === 'win').reduce((s, d) => s + d.amount, 0), dl = dice.filter(d => d.result === 'lose').reduce((s, d) => s + d.amount, 0), dNet = dw - dl;
+            let dw = sumBy(dice.filter(d => d.result === 'win'), d => d.amount), dl = sumBy(dice.filter(d => d.result === 'lose'), d => d.amount);
             $('dice-stat-wins').textContent = fmt(dw) + ' ₽'; $('dice-stat-losses').textContent = fmt(dl) + ' ₽';
-            $('dice-stat-net').textContent = fmt(dNet) + ' ₽'; $('dice-stat-net').style.color = dNet >= 0 ? 'var(--success)' : 'var(--danger)';
+            setSignedVal('dice-stat-net', dw - dl);
             renderList('dice-history-list', dice, "История костей пуста", 4, i => `
                 <tr><td>${i.date} ${i.time}</td><td>${fmt(i.amount)} ₽</td><td><span style="color:${i.result === 'win' ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${i.result === 'win' ? `Победа (+${fmt(i.amount)} ₽)` : `Проигрыш (-${fmt(i.amount)} ₽)`}</span></td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('diceHistory', ${i.id})">✕</button></td></tr>
             `);
 
             let debts = userData.debts || [];
-            $('debt-stat-i-owe').textContent = fmt(debts.filter(d => d.type === 'i_owe').reduce((s, d) => s + d.amount, 0)) + ' ₽';
-            $('debt-stat-owes-me').textContent = fmt(debts.filter(d => d.type === 'owes_me').reduce((s, d) => s + d.amount, 0)) + ' ₽';
+            $('debt-stat-i-owe').textContent = fmt(sumBy(debts.filter(d => d.type === 'i_owe'), d => d.amount)) + ' ₽';
+            $('debt-stat-owes-me').textContent = fmt(sumBy(debts.filter(d => d.type === 'owes_me'), d => d.amount)) + ' ₽';
             renderList('debts-history-list', debts, "Список долгов пуст", 5, d => `
                 <tr><td>${d.date} ${d.time}</td><td><strong>${d.person}</strong></td><td style="font-weight:bold;">${fmt(d.amount)} ₽</td><td><span style="color:${d.type === 'i_owe' ? 'var(--danger)' : 'var(--success)'};font-weight:bold;">${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'}</span></td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('debts', ${d.id})">✕</button></td></tr>
             `);
