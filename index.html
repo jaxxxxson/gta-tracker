@@ -108,7 +108,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAT03HslnNWesJcagAB-dFfITaQTrz8qw8",
@@ -226,11 +226,12 @@
         let pendingRegistrationProfile = null;
         let userData = { login: "", charName: "", staticId: "", history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
         let allUsersCache = [];
+        let allowedUsersMapCache = {};
         let globalLogsCache = [];
         let adminLogsPage = 1;
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
-        // Отображение в Рейтинге: только Имя Фамилия и Статик (без логина)
+        // Отображение в Рейтинге: только Имя Фамилия и Статик
         function formatPublicPlayer(u) {
             let name = (u.charName || "").trim();
             let st = (u.staticId || "").trim().replace(/^#/, '');
@@ -238,6 +239,17 @@
             if (name) return `<strong>${name}</strong>`;
             if (st) return `<strong>Игрок</strong> <span class="static-badge">#${st}</span>`;
             return `<strong>Не указан профиль</strong>`;
+        }
+
+        // Отображение в скобках рядом с логином в админке: (Имя Фамилия #Статик)
+        function formatBracketProfile(u) {
+            if (!u) return "";
+            let name = (u.charName || "").trim();
+            let st = (u.staticId || "").trim().replace(/^#/, '');
+            if (name && st) return ` <span style="color:var(--text-muted);font-weight:normal;">(${name} <b style="color:var(--accent);">#${st}</b>)</span>`;
+            if (name) return ` <span style="color:var(--text-muted);font-weight:normal;">(${name})</span>`;
+            if (st) return ` <span style="color:var(--text-muted);font-weight:normal;">(<b style="color:var(--accent);">#${st}</b>)</span>`;
+            return "";
         }
 
         window.switchAuthMode = function(mode) {
@@ -514,7 +526,6 @@
         };
 
         window.addEventListener('DOMContentLoaded', () => {
-            // Загружаем конфиг сразу, чтобы плейсхолдеры формы входа/регистрации применились на старте
             loadSiteConfig();
 
             document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', e => { e.preventDefault(); switchTab(b.dataset.tab, true); }));
@@ -595,11 +606,10 @@
 
                     await loadUserData();
                     await loadSiteConfig();
-                    if (currentLogin === ADMIN_LOGIN) await loadAllowedUsers();
+                    await loadGlobalRatings();
                     if (!subInterval) subInterval = setInterval(() => { updateSub(); updateTimers(); }, 1000);
                     updateSub();
                     await logAction("Вход на сайт", `${userData.charName || currentLogin} (#${userData.staticId || '—'})`);
-                    await loadGlobalRatings();
                     if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
                 } else {
                     currentUser = null; currentLogin = "";
@@ -632,12 +642,18 @@
                 allUsersCache = all;
 
                 try {
+                    let cSnap = await getDoc(doc(db, "system", "config"));
+                    allowedUsersMapCache = cSnap.exists() ? (cSnap.data().allowedUsersMap || {}) : {};
+                } catch (e) { allowedUsersMapCache = {}; }
+
+                try {
                     let gSnap = await getDoc(doc(db, "system", "logs"));
                     globalLogsCache = gSnap.exists() ? (gSnap.data().entries || []) : [];
                 } catch (e) { globalLogsCache = []; }
 
                 renderRatings(all);
                 if (currentLogin === ADMIN_LOGIN) {
+                    renderAllowedUsersList();
                     renderAdminUsersProfiles();
                     renderAdminLogs();
                 }
@@ -710,7 +726,6 @@
                 renderList(id, arr, "Нет данных", 4, rowBuilder);
             };
 
-            // В Рейтинге выводится ТОЛЬКО Имя Фамилия и #Статик (i.pubName), логин скрыт
             fillTable('rating-theft-list', theft, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} маш. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
             fillTable('rating-courier-list', courier, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} шт. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
             fillTable('rating-house-list', house, 'e', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} дом. (${i.tc} за всё время)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`);
@@ -728,34 +743,124 @@
             });
         }
 
-        // ==================== АДМИН-РЕДАКТОР ПРОФИЛЕЙ, РАЗДЕЛОВ И ЛОГОВ ====================
-        function renderAdminUsersProfiles() {
-            let sorted = [...allUsersCache].sort((a, b) => (a.login || "").localeCompare(b.login || ""));
-            renderList('admin-users-profiles-list', sorted, "Нет зарегистрированных пользователей", 4, (u, idx) => `
+        // ==================== АДМИН-РЕДАКТОР ПОДПИСОК, ПРОФИЛЕЙ И ЛОГОВ ====================
+        function getRemainingDiffForLogin(login) {
+            if (login === ADMIN_LOGIN) return 9999999999999;
+            let exp = allowedUsersMapCache[login];
+            if (!exp) return -9999999999999;
+            return exp - Date.now();
+        }
+
+        // Таблица подписок: сортировка от БОЛЬШЕГО количества дней к МЕНЬШЕМУ (внизу истекшие) + (Имя Фамилия #Статик) в скобках
+        function renderAllowedUsersList() {
+            let arr = Object.keys(allowedUsersMapCache).map(login => {
+                let uObj = allUsersCache.find(u => u.login === login);
+                return {
+                    login,
+                    diff: allowedUsersMapCache[login] - Date.now(),
+                    bracketInfo: formatBracketProfile(uObj)
+                };
+            }).sort((a, b) => b.diff - a.diff);
+
+            renderList('allowed-list', arr, "Список подписок пуст", 3, i => `
                 <tr>
-                    <td><strong style="color:var(--accent);">${u.login}</strong></td>
-                    <td><input type="text" class="inline-input" id="adm-prof-name-${idx}" value="${u.charName || ''}" placeholder="Имя Фамилия"></td>
-                    <td><input type="text" class="inline-input" id="adm-prof-static-${idx}" value="${u.staticId || ''}" placeholder="Статик"></td>
-                    <td style="text-align:right;">
-                        <button type="button" style="width:auto;padding:6px 12px;font-size:0.82rem;margin:0;" onclick="adminSaveUserProfile('${u.uid}', ${idx})">💾 Сохранить</button>
-                    </td>
+                    <td><strong>${i.login}</strong>${i.bracketInfo}</td>
+                    <td style="color:${i.diff > 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${formatTime(i.diff)}</td>
+                    <td style="text-align:right;"><button type="button" class="delete-btn" onclick="removeAllowedUser('${i.login}')" title="Удалить подписку">✕</button></td>
                 </tr>
             `);
         }
 
-        window.adminSaveUserProfile = async function(uid, idx) {
+        // Таблица зарегистрированных игроков: сортировка от БОЛЬШЕГО количества дней подписки к истекшим, редактирование Логина, Имени, Статика, Дней и Удаление
+        function renderAdminUsersProfiles() {
+            let sorted = [...allUsersCache].map(u => {
+                let diff = getRemainingDiffForLogin(u.login);
+                let remDays = u.login === ADMIN_LOGIN ? 999 : (allowedUsersMapCache[u.login] ? Math.max(0, Math.round((diff / 86400000) * 10) / 10) : 0);
+                return { ...u, diff, remDays };
+            }).sort((a, b) => b.diff - a.diff);
+
+            renderList('admin-users-profiles-list', sorted, "Нет зарегистрированных пользователей", 6, (u, idx) => {
+                let isAdm = u.login === ADMIN_LOGIN;
+                let subStatusHtml = isAdm
+                    ? `<span style="color:var(--accent);font-weight:bold;">Безлимит (Админ)</span>`
+                    : `<span style="color:${u.diff > 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;display:block;font-size:0.8rem;margin-bottom:4px;">${u.diff > 0 ? formatTime(u.diff) : 'Нет / Истекла'}</span>
+                       <input type="number" class="inline-input" id="adm-prof-days-${idx}" value="${u.remDays}" step="0.5" min="0" placeholder="Дней" title="Изменить кол-во дней подписки">`;
+
+                return `
+                    <tr>
+                        <td>
+                            <input type="text" class="inline-input" id="adm-prof-login-${idx}" value="${u.login || ''}" ${isAdm ? 'disabled' : ''} placeholder="Логин">
+                            <div style="font-size:0.78rem;margin-top:3px;">${formatBracketProfile(u)}</div>
+                        </td>
+                        <td><input type="text" class="inline-input" id="adm-prof-name-${idx}" value="${u.charName || ''}" placeholder="Имя Фамилия"></td>
+                        <td><input type="text" class="inline-input" id="adm-prof-static-${idx}" value="${u.staticId || ''}" placeholder="Статик"></td>
+                        <td>${subStatusHtml}</td>
+                        <td style="text-align:right;white-space:nowrap;">
+                            <button type="button" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0;" onclick="adminSaveUserProfile('${u.uid}', '${u.login}', ${idx})" title="Сохранить изменения">💾</button>
+                            ${!isAdm ? `<button type="button" class="danger" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0 0 0 6px;" onclick="adminDeleteUserProfile('${u.uid}', '${u.login}')" title="Полностью удалить профиль и подписку">🗑</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.adminSaveUserProfile = async function(uid, oldLogin, idx) {
+            let newLogin = ($(`adm-prof-login-${idx}`)?.value || oldLogin).trim().toLowerCase();
             let charName = $(`adm-prof-name-${idx}`)?.value.trim() || "";
             let staticId = $(`adm-prof-static-${idx}`)?.value.trim().replace(/^#/, '') || "";
+            let daysInput = $(`adm-prof-days-${idx}`);
+
+            if (!newLogin) return showToast("Логин не может быть пустым!", "error");
+
             try {
-                await setDoc(doc(db, "users", uid), { charName, staticId }, { merge: true });
+                // 1. Обновляем профиль игрока в коллекции users
+                await setDoc(doc(db, "users", uid), { login: newLogin, charName, staticId }, { merge: true });
+
+                // 2. Обновляем подписку в system/config (переносим на новый логин, если логин был изменен, и обновляем дни)
+                if (oldLogin !== ADMIN_LOGIN) {
+                    let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                    let map = snap.exists() ? { ...(snap.data().allowedUsersMap || {}) } : {};
+
+                    if (newLogin !== oldLogin) {
+                        if (map[oldLogin] && !map[newLogin]) map[newLogin] = map[oldLogin];
+                        delete map[oldLogin];
+                    }
+
+                    if (daysInput) {
+                        let dVal = parseFloat(daysInput.value);
+                        if (!isNaN(dVal)) {
+                            if (dVal > 0) map[newLogin] = Date.now() + (dVal * 86400000);
+                            else delete map[newLogin];
+                        }
+                    }
+                    await setDoc(ref, { allowedUsersMap: map }, { merge: true });
+                }
+
                 if (currentUser && currentUser.uid === uid) {
                     userData.charName = charName;
                     userData.staticId = staticId;
                     renderState();
                 }
                 await loadGlobalRatings();
-                showToast("Данные персонажа (Имя и Статик) обновлены!");
+                showToast(`Данные пользователя «${newLogin}» успешно сохранены!`);
             } catch (e) { showToast("Ошибка: " + e.message, "error"); }
+        };
+
+        window.adminDeleteUserProfile = async function(uid, login) {
+            if (!confirm(`Полностью удалить пользователя «${login}», его данные и подписку?`)) return;
+            try {
+                if (uid) await deleteDoc(doc(db, "users", uid));
+                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                if (snap.exists()) {
+                    let map = { ...(snap.data().allowedUsersMap || {}) };
+                    if (map[login]) {
+                        delete map[login];
+                        await setDoc(ref, { allowedUsersMap: map }, { merge: true });
+                    }
+                }
+                await loadGlobalRatings();
+                showToast(`Профиль и подписка «${login}» удалены!`, "error");
+            } catch (e) { showToast("Ошибка удаления: " + e.message, "error"); }
         };
 
         function renderAdminEditor() {
@@ -989,7 +1094,11 @@
             filterSel.innerHTML = `<option value="all">👤 Все игроки (${allUsersCache.length})</option>`;
 
             let logins = allUsersCache.map(u => u.login).filter(Boolean).sort();
-            [...new Set(logins)].forEach(l => filterSel.add(new Option(l, l)));
+            [...new Set(logins)].forEach(l => {
+                let uObj = allUsersCache.find(x => x.login === l);
+                let label = uObj?.charName ? `${l} (${uObj.charName}${uObj.staticId ? ' #' + uObj.staticId : ''})` : l;
+                filterSel.add(new Option(label, l));
+            });
             if (prevUser && (prevUser === 'all' || logins.includes(prevUser))) filterSel.value = prevUser;
 
             let selectedUser = filterSel.value;
@@ -1008,8 +1117,11 @@
                 if (selectedType === 'operations' && cat === 'nav') return;
                 if (selectedType !== 'all' && selectedType !== 'operations' && cat !== selectedType) return;
 
+                let uObj = allUsersCache.find(x => x.login === login);
+                let charStr = uObj?.charName ? `${uObj.charName} #${uObj.staticId || ''}` : '';
+
                 if (searchQuery) {
-                    let hay = `${login} ${date} ${time} ${action} ${details}`.toLowerCase();
+                    let hay = `${login} ${charStr} ${date} ${time} ${action} ${details}`.toLowerCase();
                     if (!hay.includes(searchQuery)) return;
                 }
 
@@ -1018,7 +1130,7 @@
                 seenKeys.add(key);
 
                 let ts = parseRuDateTime(date, time, rawId);
-                combined.push({ login, ts, date: date || '—', time: time || '—', action, details, cat });
+                combined.push({ login, bracket: formatBracketProfile(uObj), ts, date: date || '—', time: time || '—', action, details, cat });
             };
 
             (globalLogsCache || []).forEach(g => pushUnique(g.login, g.id, g.date, g.time, g.action, g.details));
@@ -1114,7 +1226,7 @@
             renderList('admin-logs-list', pageSlice, "По выбранным фильтрам записей не найдено", 4, l => `
                 <tr>
                     <td style="white-space:nowrap;color:var(--text-muted);font-size:0.86rem;">${l.date} ${l.time}</td>
-                    <td><strong style="color:var(--accent);">${l.login}</strong></td>
+                    <td><strong style="color:var(--accent);">${l.login}</strong>${l.bracket}</td>
                     <td>${l.action}</td>
                     <td style="color:${l.cat === 'nav' ? 'var(--text-muted)' : 'var(--success)'};">${l.details || '—'}</td>
                 </tr>
@@ -1152,19 +1264,6 @@
             else $('sub-countdown').textContent = formatTime(diff);
         }
 
-        async function loadAllowedUsers() {
-            let snap = await getDoc(doc(db, "system", "config"));
-            let map = snap.exists() ? (snap.data().allowedUsersMap || {}) : {};
-            let arr = Object.keys(map).map(login => ({ login, diff: map[login] - Date.now() })).sort((a, b) => a.diff - b.diff);
-            renderList('allowed-list', arr, "Список пуст", 3, i => `
-                <tr>
-                    <td>${i.login}</td>
-                    <td style="color:${i.diff > 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${formatTime(i.diff)}</td>
-                    <td style="text-align:right;"><button type="button" class="delete-btn" onclick="removeAllowedUser('${i.login}')" title="Забрать подписку">✕</button></td>
-                </tr>
-            `);
-        }
-
         window.addAllowedUser = async function() {
             let login = $('new-allowed-login').value.trim().toLowerCase(), days = parseFloat($('new-allowed-days').value) || 30;
             if (!login) return;
@@ -1173,7 +1272,7 @@
             map[login] = Date.now() + (days * 86400000);
             await setDoc(ref, { allowedUsersMap: map }, { merge: true });
             $('new-allowed-login').value = '';
-            await loadAllowedUsers();
+            await loadGlobalRatings();
             showToast(`Доступ для "${login}" выдан!`);
         };
 
@@ -1184,7 +1283,7 @@
                     let map = { ...(snap.data().allowedUsersMap || {}) };
                     delete map[login];
                     await updateDoc(ref, { allowedUsersMap: map });
-                    await loadAllowedUsers();
+                    await loadGlobalRatings();
                     showToast(`Подписка у "${login}" успешно забрана!`, "error");
                 }
             } catch (err) { showToast("Ошибка: " + err.message, "error"); }
@@ -1257,7 +1356,6 @@
                 : `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(basePrice)} ₽</strong>`;
         }
 
-        // Авторизация (по логину и паролю) и Регистрация (Имя Фамилия + Статик + Логин + Пароль, по подписке на логин)
         async function authAction(isReg) {
             let l = $('auth-login').value.trim().toLowerCase(), p = $('auth-pass').value;
             if (!l || !p) return showToast("Введите логин и пароль!", "error");
@@ -1463,7 +1561,6 @@
         }
 
         function renderState() {
-            // Шапка профиля игрока
             let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : currentLogin;
             if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${currentLogin}]</small>`;
 
@@ -1626,19 +1723,19 @@
                     <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок (в днях):</label>
                     <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
                     <button id="btn-add-allowed">Выдать / продлить доступ</button>
-                    <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки (по возрастанию времени):</h3>
+                    <h3 style="margin-top: 20px; font-size: 1rem;">Список подписок (сверху больше всего дней, снизу истекшие):</h3>
                     <table>
-                        <thead><tr><th>Логин</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
+                        <thead><tr><th>Логин (Имя Фамилия #Статик)</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
                         <tbody id="allowed-list"><tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr></tbody>
                     </table>
                 </div>
 
                 <div class="card admin-card">
-                    <h2>👤 Зарегистрированные игроки (Редактор Имени Фамилии и Статика)</h2>
-                    <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0;">Здесь вы можете изменить Имя Фамилию персонажа и Статик любого игрока (именно эти данные отображаются в «Рейтинге»):</p>
+                    <h2>👤 Все игроки (Редактор Логина, Имени Фамилии, Статика, Подписки и Удаление)</h2>
+                    <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0;">Сверху отсортированы игроки с наибольшим запасом подписки, а в самом низу — с закончившейся подпиской. Вы можете изменить любые поля (включая старый логин или дни подписки) и нажать 💾, либо полностью удалить профиль кнопкой 🗑:</p>
                     <table>
-                        <thead><tr><th style="width:140px;">Логин входа</th><th>Имя Фамилия персонажа</th><th style="width:140px;">Статик</th><th style="width:130px;">Действие</th></tr></thead>
-                        <tbody id="admin-users-profiles-list"><tr><td colspan="4" style="text-align:center;">Загрузка...</td></tr></tbody>
+                        <thead><tr><th style="width:170px;">Логин входа</th><th>Имя Фамилия персонажа</th><th style="width:110px;">Статик</th><th style="width:140px;">Подписка (Дней)</th><th style="width:105px;">Действие</th></tr></thead>
+                        <tbody id="admin-users-profiles-list"><tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -1834,7 +1931,7 @@
 
                     <div class="logs-scroll-box">
                         <table>
-                            <thead><tr><th style="width:135px;">Дата / Время</th><th style="width:115px;">Логин</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
+                            <thead><tr><th style="width:135px;">Дата / Время</th><th style="width:180px;">Логин (Персонаж)</th><th>Действие / Операция</th><th>Подробности</th></tr></thead>
                             <tbody id="admin-logs-list"><tr><td colspan="4" style="text-align:center;">Загрузка логов...</td></tr></tbody>
                         </table>
                     </div>
@@ -2078,7 +2175,7 @@
             </div>
         </div>
 
-        <!-- Раздел Рейтинг (Отображаются ТОЛЬКО Имя Фамилия и Статик) -->
+        <!-- Раздел Рейтинг -->
         <div id="tab-rating" class="tab-content">
             <div class="card">
                 <h2>🚗 Рейтинг угонщиков (Фарм)</h2>
