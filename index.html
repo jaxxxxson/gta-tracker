@@ -24,7 +24,7 @@
             color: var(--text-color);
             margin: 0; padding: 30px 20px; min-height: 100vh; scroll-behavior: smooth;
         }
-        .container { max-width: 950px; margin: 0 auto; }
+        .container { max-width: 980px; margin: 0 auto; }
         h1 {
             text-align: center; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;
             background: linear-gradient(135deg, #ffffff 30%, #9ca3af 100%);
@@ -32,35 +32,35 @@
         }
         h1 span { display: block; font-size: 0.9rem; font-weight: 500; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-top: 5px; -webkit-text-fill-color: var(--accent); }
         h2 { font-size: 1.3rem; font-weight: 700; color: #f9fafb; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; }
-        .nav-tabs, .sub-tabs { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; align-items: center; }
+        .nav-tabs, .sub-tabs { display: flex; gap: 12px; margin-bottom: 25px; flex-wrap: wrap; align-items: center; }
         .sub-tabs { padding-left: 15px; border-left: 3px solid var(--accent); justify-content: space-between; }
         .sub-tabs-links { display: flex; gap: 10px; flex-wrap: wrap; }
         .nav-btn, .sub-btn {
-            flex: 1; padding: 16px; border-radius: 14px; border: 1px solid var(--card-border);
+            flex: 1; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--card-border);
             background: var(--card-bg); backdrop-filter: blur(12px); color: var(--text-muted);
-            font-size: 1.1rem; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; transition: 0.3s;
+            font-size: 1.02rem; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; transition: 0.3s; white-space: nowrap;
         }
         .sub-btn { flex: none; font-size: 0.9rem; padding: 10px 18px; border-radius: 10px; width: auto; margin-top: 0; box-shadow: none; }
         .nav-btn:hover, .sub-btn:hover { border-color: rgba(245, 158, 11, 0.4); color: var(--text-color); transform: translateY(-1px); }
         .nav-btn.active { background: var(--gold-gradient); color: #000; border-color: transparent; box-shadow: 0 0 25px var(--accent-glow); }
         .sub-btn.active { background: rgba(245, 158, 11, 0.15); color: var(--accent); border-color: var(--accent); }
-        .tab-content, .farm-content { display: none; }
-        .tab-content.active, .farm-content.active { display: block; animation: fadeIn 0.3s ease; }
+        .tab-content, .farm-content, .admin-content { display: none; }
+        .tab-content.active, .farm-content.active, .admin-content.active { display: block; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         .section-block { scroll-margin-top: 25px; margin-bottom: 35px; }
         .clock-box { background: var(--card-bg); border: 1px solid var(--card-border); padding: 18px; border-radius: 14px; text-align: center; font-size: 1.15rem; margin-bottom: 25px; }
         .time-val { color: var(--accent); font-weight: bold; }
         .card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid var(--card-border); border-radius: 18px; padding: 25px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
         .admin-card { border: 1px dashed rgba(245, 158, 11, 0.4); background: rgba(15, 23, 42, 0.85); }
-        input, select, button { width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(3, 7, 18, 0.7); color: var(--text-color); font-size: 1rem; margin-top: 10px; outline: none; box-sizing: border-box; }
+        input, select, button { width: 100%; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(3, 7, 18, 0.7); color: var(--text-color); font-size: 0.98rem; margin-top: 10px; outline: none; box-sizing: border-box; }
         input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
         button { background: var(--gold-gradient); color: #000; font-weight: 700; cursor: pointer; border: none; box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3); transition: 0.2s; }
         button:hover { transform: translateY(-1px); }
         button.danger { background: linear-gradient(135deg, #f87171 0%, #dc2626 100%); color: #fff; }
-        button.secondary { background: rgba(55, 65, 81, 0.8); color: #fff; border: 1px solid var(--card-border); }
+        button.secondary { background: rgba(55, 65, 81, 0.8); color: #fff; border: 1px solid var(--card-border); box-shadow: none; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
-        th, td { padding: 14px; text-align: left; border-bottom: 1px solid var(--card-border); font-size: 0.95rem; }
-        th { color: var(--text-muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+        th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--card-border); font-size: 0.93rem; }
+        th { color: var(--text-muted); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; }
         tr:last-child td { border-bottom: none; }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 25px; }
         .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px; padding: 20px; text-align: center; }
@@ -75,6 +75,9 @@
         .day-header { background: rgba(3, 7, 18, 0.5); color: var(--accent); font-weight: 700; text-align: center; }
         .sort-box { display: flex; align-items: center; gap: 10px; }
         .sort-box select { width: auto; margin-top: 0; padding: 9px 14px; font-size: 0.9rem; border-color: rgba(245, 158, 11, 0.4); }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: center; }
+        .inline-input { margin-top: 0; padding: 8px 10px; font-size: 0.9rem; }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -111,7 +114,8 @@
         const getMskNow = () => {
             let now = new Date();
             return {
-                time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
+                time: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                shortTime: now.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
                 date: now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
             };
         };
@@ -137,29 +141,113 @@
             if (input.id === 'custom-theft-price') updateCarInfo();
         };
 
-        // Компактная база автомобилей 7-го уровня (по умолчанию 65625 / 46875)
-        const car20 = (name, day = 65625, night = 46875) => ({ name, day, night });
-        const level7Cars = [
-            car20("Angelholm Gesko"), car20("Angelholm RG-R"), car20("Angelholm Selip-CC850"),
-            car20("Daimler-AMX SL R232", 18900, 13500), car20("Ferruccio Rewuelto"), car20("Ferruccio Siun"),
-            car20("Ferruccio Verano"), car20("Leslie 720-S", 36750, 26250), car20("Leslie Alex"),
-            car20("Leslie Ayrton"), car20("Leslie P1"), car20("Maranello 488", 32725, 23375),
-            car20("Maranello F12 Verleenetta", 41650, 28325), car20("Maranello FXX-K"), car20("Maranello LaMaranello"),
-            car20("Maranello Timucua SP3"), car20("Molsheim Atlantick"), car20("Molsheim Formula"),
-            car20("Molsheim Shiron"), car20("Molsheim Vivo"), car20("Molsheim Weyron"),
-            car20("Wayn GT"), car20("Wurttem 918 Spyder"), car20("York Bamford DBX", 45500, 32500)
-        ].sort((a, b) => a.name.localeCompare(b.name));
+        // Дефолтная конфигурация сайта (редактируется через Админ-панель и хранится в Firestore)
+        const carDef = (name, day = 65625, night = 46875) => ({ name, day, night });
+        const defaultSiteConfig = {
+            labels: {
+                siteTitle: "Помощник Россия Онлайн",
+                tabPerekup: "📈 Перекуп",
+                tabFarm: "💰 Фарм",
+                tabCasino: "🎰 Казино",
+                tabDebts: "💸 Долги",
+                tabRating: "🏆 Рейтинг",
+                subTheft: "🚗 Угонщик",
+                subCourier: "📦 Закладчик",
+                subHouse: "🏠 Ограбление домов"
+            },
+            wheelBonuses: [20, 25, 30, 35],
+            theftLevels: {
+                "1-6": { name: "1-6 уровень", mode: "custom", cars: [] },
+                "7": {
+                    name: "7 уровень",
+                    mode: "list",
+                    cars: [
+                        carDef("Angelholm Gesko"), carDef("Angelholm RG-R"), carDef("Angelholm Selip-CC850"),
+                        carDef("Daimler-AMX SL R232", 18900, 13500), carDef("Ferruccio Rewuelto"), carDef("Ferruccio Siun"),
+                        carDef("Ferruccio Verano"), carDef("Leslie 720-S", 36750, 26250), carDef("Leslie Alex"),
+                        carDef("Leslie Ayrton"), carDef("Leslie P1"), carDef("Maranello 488", 32725, 23375),
+                        carDef("Maranello F12 Verleenetta", 41650, 28325), carDef("Maranello FXX-K"), carDef("Maranello LaMaranello"),
+                        carDef("Maranello Timucua SP3"), carDef("Molsheim Atlantick"), carDef("Molsheim Formula"),
+                        carDef("Molsheim Shiron"), carDef("Molsheim Vivo"), carDef("Molsheim Weyron"),
+                        carDef("Wayn GT"), carDef("Wurttem 918 Spyder"), carDef("York Bamford DBX", 45500, 32500)
+                    ]
+                }
+            }
+        };
 
+        let siteConfig = JSON.parse(JSON.stringify(defaultSiteConfig));
         let currentUser = null, currentLogin = "";
-        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [] };
+        let userData = { history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], activityLogs: [] };
+        let allUsersCache = [];
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
+
+        // Логирование действий пользователя
+        async function logAction(action, details = "") {
+            if (!currentUser) return;
+            if (!userData.activityLogs) userData.activityLogs = [];
+            let { date, time } = getMskNow();
+            userData.activityLogs.unshift({ id: Date.now() + Math.random(), date, time, action, details });
+            if (userData.activityLogs.length > 150) userData.activityLogs.length = 150;
+            try { await setDoc(doc(db, "users", currentUser.uid), { login: currentLogin, activityLogs: userData.activityLogs }, { merge: true }); }
+            catch (e) { console.error(e); }
+        }
+
+        async function loadSiteConfig() {
+            try {
+                let snap = await getDoc(doc(db, "system", "siteConfig"));
+                if (snap.exists()) {
+                    let data = snap.data();
+                    siteConfig.labels = { ...defaultSiteConfig.labels, ...(data.labels || {}) };
+                    siteConfig.wheelBonuses = data.wheelBonuses?.length ? data.wheelBonuses : defaultSiteConfig.wheelBonuses;
+                    siteConfig.theftLevels = data.theftLevels || defaultSiteConfig.theftLevels;
+                } else {
+                    await setDoc(doc(db, "system", "siteConfig"), siteConfig);
+                }
+            } catch (e) { console.error(e); }
+            applySiteConfig();
+        }
+
+        function applySiteConfig() {
+            let L = siteConfig.labels;
+            $('main-title-text').textContent = L.siteTitle || "Помощник Россия Онлайн";
+            $('nav-perekup').textContent = L.tabPerekup;
+            $('nav-farm').textContent = L.tabFarm;
+            $('nav-casino').textContent = L.tabCasino;
+            $('nav-debts').textContent = L.tabDebts;
+            $('nav-rating').textContent = L.tabRating;
+            $('sub-btn-theft').textContent = L.subTheft;
+            $('sub-btn-courier').textContent = L.subCourier;
+            $('sub-btn-house').textContent = L.subHouse;
+
+            let bSel = $('wheel-bonus-select');
+            if (bSel) {
+                let curB = bSel.value;
+                bSel.innerHTML = '';
+                siteConfig.wheelBonuses.forEach(p => bSel.add(new Option(`+${p}% к оплате`, p)));
+                if (curB && siteConfig.wheelBonuses.includes(Number(curB))) bSel.value = curB;
+            }
+
+            let levelSel = $('level-select'), prevLvl = levelSel.value;
+            levelSel.innerHTML = '';
+            let keys = Object.keys(siteConfig.theftLevels);
+            keys.forEach(k => levelSel.add(new Option(siteConfig.theftLevels[k].name, k)));
+            if (prevLvl && siteConfig.theftLevels[prevLvl]) levelSel.value = prevLvl;
+            else if (siteConfig.theftLevels["7"]) levelSel.value = "7";
+
+            updateCarList();
+            if (currentLogin === ADMIN_LOGIN) renderAdminEditor();
+        }
 
         window.addEventListener('DOMContentLoaded', () => {
             function switchTab(name, pushState = true) {
+                if (name === 'admin' && currentLogin !== ADMIN_LOGIN) name = 'perekup';
                 document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + name));
                 if (pushState) history.pushState({ tab: name }, '', '/' + name);
-                if (name === 'rating' && currentUser) loadGlobalRatings();
+                if (currentUser) {
+                    logAction("Переход во вкладку", name);
+                    if (name === 'rating' || name === 'admin') loadGlobalRatings();
+                }
             }
 
             document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', e => { e.preventDefault(); switchTab(b.dataset.tab, true); }));
@@ -168,31 +256,35 @@
                 document.querySelectorAll('.farm-content').forEach(x => x.classList.remove('active'));
                 b.classList.add('active');
                 $('farm-sub-' + b.dataset.farmSub).classList.add('active');
+                logAction("Открыт подраздел фарма", b.textContent.trim());
+            }));
+            document.querySelectorAll('.admin-sub').forEach(b => b.addEventListener('click', () => {
+                document.querySelectorAll('.admin-sub').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.admin-content').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                $('admin-sub-' + b.dataset.adminSub).classList.add('active');
+                if (b.dataset.adminSub === 'logs') loadGlobalRatings();
             }));
 
             window.addEventListener('popstate', () => {
                 let path = window.location.pathname.replace('/', '') || 'perekup';
-                if (['perekup', 'farm', 'casino', 'debts', 'rating'].includes(path)) switchTab(path, false);
+                if (['perekup', 'farm', 'casino', 'debts', 'rating', 'admin'].includes(path)) switchTab(path, false);
             });
 
             let initialPath = window.location.pathname.replace('/', '');
-            switchTab(['perekup', 'farm', 'casino', 'debts', 'rating'].includes(initialPath) ? initialPath : 'perekup', false);
+            switchTab(['perekup', 'farm', 'casino', 'debts', 'rating', 'admin'].includes(initialPath) ? initialPath : 'perekup', false);
 
-            let levelSel = $('level-select'), carSel = $('car-select');
-            levelSel.add(new Option("1-6 уровень", "1-6"));
-            levelSel.add(new Option("7 уровень", "7", true, true));
-            level7Cars.forEach(c => carSel.add(new Option(c.name, c.name)));
-
-            levelSel.addEventListener('change', updateCarList);
-            carSel.addEventListener('change', updateCarInfo);
+            $('level-select').addEventListener('change', () => { updateCarList(); logAction("Выбран уровень угона", $('level-select').value); });
+            $('car-select').addEventListener('change', () => { updateCarInfo(); logAction("Выбран авто в списке", $('car-select').value); });
             $('wheel-bonus-select').addEventListener('change', updateCarInfo);
-            $('reseller-sort').addEventListener('change', renderState);
-            updateCarList();
+            $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
+            $('admin-level-picker').addEventListener('change', renderAdminCarsList);
+            $('admin-log-user-filter').addEventListener('change', renderAdminLogs);
 
             const clicks = {
                 'btn-login': () => authAction(false),
                 'btn-register': () => authAction(true),
-                'btn-logout': () => signOut(auth),
+                'btn-logout': async () => { await logAction("Выход из аккаунта"); signOut(auth); },
                 'btn-start': startTheft,
                 'btn-finish': () => endTheft(false),
                 'btn-caught': () => endTheft(true),
@@ -201,7 +293,14 @@
                 'btn-add-dice': addDiceGame,
                 'btn-add-courier': addCourierRecord,
                 'btn-add-house': addHouseRecord,
-                'btn-add-debt': addDebtRecord
+                'btn-add-debt': addDebtRecord,
+                'btn-admin-save-level': adminSaveLevelSettings,
+                'btn-admin-add-level': adminCreateNewLevel,
+                'btn-admin-delete-level': adminDeleteLevel,
+                'btn-admin-add-car': adminAddCarToLevel,
+                'btn-admin-save-labels': adminSaveLabelsAndBonuses,
+                'btn-admin-refresh-logs': loadGlobalRatings,
+                'btn-admin-clear-logs': adminClearSelectedUserLogs
             };
             Object.entries(clicks).forEach(([id, fn]) => $(id)?.addEventListener('click', fn));
 
@@ -221,12 +320,14 @@
                     $('auth-section').style.display = 'none';
                     $('app-section').style.display = 'block';
                     $('user-login').textContent = currentLogin;
-                    $('admin-panel').style.display = currentLogin === ADMIN_LOGIN ? 'block' : 'none';
+                    $('nav-admin').style.display = currentLogin === ADMIN_LOGIN ? 'block' : 'none';
 
+                    await loadSiteConfig();
                     if (currentLogin === ADMIN_LOGIN) await loadAllowedUsers();
                     if (!subInterval) subInterval = setInterval(() => { updateSub(); updateTimers(); }, 1000);
                     updateSub();
                     await loadUserData();
+                    await logAction("Вход на сайт", "Сессия открыта");
                     await loadGlobalRatings();
                     if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 300000);
                 } else {
@@ -252,8 +353,10 @@
         async function loadGlobalRatings() {
             try {
                 let snap = await getDocs(collection(db, "users")), all = [];
-                snap.forEach(d => all.push(d.data()));
+                snap.forEach(d => all.push({ uid: d.id, ...d.data() }));
+                allUsersCache = all;
                 renderRatings(all);
+                if (currentLogin === ADMIN_LOGIN) renderAdminLogs();
             } catch (err) { console.error(err); }
         }
 
@@ -317,6 +420,171 @@
             fillTable('rating-casino-list', casino, 'net', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td style="color:var(--success);">+${fmt(i.w)} ₽</td><td style="color:var(--danger);">-${fmt(i.l)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
             fillTable('rating-debts-list', debts, 'net', (i, idx) => `<tr><td>#${idx + 1} <strong>${i.login}</strong></td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
         }
+
+        // ==================== АДМИН-РЕДАКТОР И ЛОГИ ====================
+        function renderAdminEditor() {
+            let picker = $('admin-level-picker'), prev = picker.value;
+            picker.innerHTML = '';
+            Object.keys(siteConfig.theftLevels).forEach(k => picker.add(new Option(`${siteConfig.theftLevels[k].name} (ключ: ${k})`, k)));
+            if (prev && siteConfig.theftLevels[prev]) picker.value = prev;
+            renderAdminCarsList();
+
+            let L = siteConfig.labels;
+            $('adm-lbl-title').value = L.siteTitle || "";
+            $('adm-lbl-perekup').value = L.tabPerekup || "";
+            $('adm-lbl-farm').value = L.tabFarm || "";
+            $('adm-lbl-casino').value = L.tabCasino || "";
+            $('adm-lbl-debts').value = L.tabDebts || "";
+            $('adm-lbl-rating').value = L.tabRating || "";
+            $('adm-lbl-theft').value = L.subTheft || "";
+            $('adm-lbl-courier').value = L.subCourier || "";
+            $('adm-lbl-house').value = L.subHouse || "";
+            $('adm-wheel-bonuses').value = (siteConfig.wheelBonuses || []).join(', ');
+        }
+
+        function renderAdminCarsList() {
+            let lvlKey = $('admin-level-picker').value;
+            let lvl = siteConfig.theftLevels[lvlKey];
+            if (!lvl) return;
+            $('admin-level-name').value = lvl.name;
+            $('admin-level-mode').value = lvl.mode || 'list';
+            $('admin-cars-box').style.display = lvl.mode === 'custom' ? 'none' : 'block';
+
+            let cars = [...(lvl.cars || [])].sort((a, b) => a.name.localeCompare(b.name));
+            renderList('admin-cars-list', cars, "В этом уровне пока нет машин", 4, (c, idx) => `
+                <tr>
+                    <td><input type="text" class="inline-input" id="adm-car-name-${idx}" value="${c.name}"></td>
+                    <td><input type="number" class="inline-input" id="adm-car-day-${idx}" value="${c.day}"></td>
+                    <td><input type="number" class="inline-input" id="adm-car-night-${idx}" value="${c.night}"></td>
+                    <td style="text-align:right;white-space:nowrap;">
+                        <button type="button" style="width:auto;padding:6px 10px;font-size:0.8rem;margin:0;" onclick="adminUpdateCar('${lvlKey}', '${c.name.replace(/'/g, "\\'")}', ${idx})">💾</button>
+                        <button type="button" class="delete-btn" onclick="adminRemoveCar('${lvlKey}', '${c.name.replace(/'/g, "\\'")}')" title="Удалить авто">✕</button>
+                    </td>
+                </tr>
+            `);
+        }
+
+        async function saveSiteConfigToDb(msg = "Настройки сайта сохранены!") {
+            await setDoc(doc(db, "system", "siteConfig"), siteConfig);
+            applySiteConfig();
+            showToast(msg);
+        }
+
+        async function adminSaveLevelSettings() {
+            let key = $('admin-level-picker').value;
+            if (!siteConfig.theftLevels[key]) return;
+            siteConfig.theftLevels[key].name = $('admin-level-name').value.trim() || key;
+            siteConfig.theftLevels[key].mode = $('admin-level-mode').value;
+            await saveSiteConfigToDb("Настройки уровня обновлены!");
+        }
+
+        async function adminCreateNewLevel() {
+            let key = prompt("Введите короткий код уровня (например: 6 или 8):");
+            if (!key) return;
+            key = key.trim();
+            let name = prompt("Введите отображаемое название уровня:", `${key} уровень`);
+            if (!name) return;
+            siteConfig.theftLevels[key] = { name: name.trim(), mode: "list", cars: [] };
+            await saveSiteConfigToDb(`Уровень «${name}» создан!`);
+            $('admin-level-picker').value = key;
+            renderAdminCarsList();
+        }
+
+        async function adminDeleteLevel() {
+            let key = $('admin-level-picker').value;
+            if (Object.keys(siteConfig.theftLevels).length <= 1) return showToast("Нельзя удалить последний уровень!", "error");
+            if (!confirm(`Удалить уровень «${siteConfig.theftLevels[key].name}»?`)) return;
+            delete siteConfig.theftLevels[key];
+            await saveSiteConfigToDb("Уровень удален!");
+        }
+
+        async function adminAddCarToLevel() {
+            let key = $('admin-level-picker').value;
+            let name = $('adm-new-car-name').value.trim();
+            let day = getCleanNumber('adm-new-car-day');
+            let night = getCleanNumber('adm-new-car-night');
+            if (!name || day <= 0 || night <= 0) return showToast("Заполните название, дневную и ночную цену!", "error");
+
+            let cars = siteConfig.theftLevels[key].cars || [];
+            let existing = cars.find(c => c.name.toLowerCase() === name.toLowerCase());
+            if (existing) { existing.day = day; existing.night = night; }
+            else cars.push({ name, day, night });
+
+            siteConfig.theftLevels[key].cars = cars;
+            $('adm-new-car-name').value = ""; $('adm-new-car-day').value = ""; $('adm-new-car-night').value = "";
+            await saveSiteConfigToDb(`Авто «${name}» добавлено!`);
+        }
+
+        window.adminUpdateCar = async function(lvlKey, oldName, idx) {
+            let cars = siteConfig.theftLevels[lvlKey]?.cars || [];
+            let item = cars.find(c => c.name === oldName);
+            if (!item) return;
+            item.name = $(`adm-car-name-${idx}`).value.trim() || oldName;
+            item.day = parseFloat($(`adm-car-day-${idx}`).value) || 0;
+            item.night = parseFloat($(`adm-car-night-${idx}`).value) || 0;
+            await saveSiteConfigToDb(`Авто «${item.name}» обновлено!`);
+        };
+
+        window.adminRemoveCar = async function(lvlKey, carName) {
+            siteConfig.theftLevels[lvlKey].cars = (siteConfig.theftLevels[lvlKey].cars || []).filter(c => c.name !== carName);
+            await saveSiteConfigToDb(`Авто «${carName}» удалено!`);
+        };
+
+        async function adminSaveLabelsAndBonuses() {
+            siteConfig.labels = {
+                siteTitle: $('adm-lbl-title').value.trim() || "Помощник Россия Онлайн",
+                tabPerekup: $('adm-lbl-perekup').value.trim() || "📈 Перекуп",
+                tabFarm: $('adm-lbl-farm').value.trim() || "💰 Фарм",
+                tabCasino: $('adm-lbl-casino').value.trim() || "🎰 Казино",
+                tabDebts: $('adm-lbl-debts').value.trim() || "💸 Долги",
+                tabRating: $('adm-lbl-rating').value.trim() || "🏆 Рейтинг",
+                subTheft: $('adm-lbl-theft').value.trim() || "🚗 Угонщик",
+                subCourier: $('adm-lbl-courier').value.trim() || "📦 Закладчик",
+                subHouse: $('adm-lbl-house').value.trim() || "🏠 Ограбление домов"
+            };
+            let bonuses = $('adm-wheel-bonuses').value.split(',').map(x => parseInt(x.trim())).filter(x => !isNaN(x) && x > 0);
+            if (bonuses.length) siteConfig.wheelBonuses = bonuses;
+            await saveSiteConfigToDb("Разделы и бонусы обновлены!");
+        }
+
+        function renderAdminLogs() {
+            let filterSel = $('admin-log-user-filter'), prevUser = filterSel.value;
+            filterSel.innerHTML = `<option value="all">Все пользователи</option>`;
+            let logins = allUsersCache.map(u => u.login).filter(Boolean).sort();
+            [...new Set(logins)].forEach(l => filterSel.add(new Option(l, l)));
+            if (prevUser && (prevUser === 'all' || logins.includes(prevUser))) filterSel.value = prevUser;
+
+            let selected = filterSel.value;
+            let logs = [];
+            allUsersCache.forEach(u => {
+                if (!u.login || (selected !== 'all' && u.login !== selected)) return;
+                (u.activityLogs || []).forEach( entry => logs.push({ login: u.login, ...entry }) );
+            });
+            logs.sort((a, b) => (b.id || 0) - (a.id || 0));
+
+            renderList('admin-logs-list', logs.slice(0, 200), "Логов действий пока нет", 4, l => `
+                <tr>
+                    <td style="white-space:nowrap;color:var(--text-muted);">${l.date} ${l.time}</td>
+                    <td><strong style="color:var(--accent);">${l.login}</strong></td>
+                    <td>${l.action}</td>
+                    <td style="color:var(--success);">${l.details || '—'}</td>
+                </tr>
+            `);
+        }
+
+        async function adminClearSelectedUserLogs() {
+            let selected = $('admin-log-user-filter').value;
+            if (!confirm(`Очистить логи (${selected === 'all' ? 'всех игроков' : selected})?`)) return;
+            for (let u of allUsersCache) {
+                if (selected === 'all' || u.login === selected) {
+                    if (u.uid) await updateDoc(doc(db, "users", u.uid), { activityLogs: [] });
+                }
+            }
+            if (selected === 'all' || selected === currentLogin) userData.activityLogs = [];
+            await loadGlobalRatings();
+            showToast("Логи очищены!");
+        }
+        // ===============================================================
 
         function formatTime(ms) {
             if (ms <= 0) return "Истекла";
@@ -388,25 +656,37 @@
             updateCarInfo();
         };
 
+        const getCurrentLevelObj = () => siteConfig.theftLevels[$('level-select').value] || { mode: 'custom', cars: [] };
+
         function getActiveBonusPercent() {
-            if ($('level-select').value !== '7' || $('custom-price-check')?.checked) return 0;
+            let lvl = getCurrentLevelObj();
+            if (lvl.mode === 'custom' || $('custom-price-check')?.checked) return 0;
             return $('wheel-bonus-check')?.checked ? (parseInt($('wheel-bonus-select').value) || 0) : 0;
         }
 
         function updateCarList() {
-            let isLevel7 = $('level-select').value === '7';
-            $('car-select-box').style.display = isLevel7 ? 'block' : 'none';
-            $('wheel-bonus-container').style.display = isLevel7 ? 'block' : 'none';
-            $('custom-price-check-container').style.display = isLevel7 ? 'block' : 'none';
-            $('custom-price-box').style.display = (!isLevel7 || $('custom-price-check')?.checked) ? 'block' : 'none';
+            let lvl = getCurrentLevelObj();
+            let isListMode = lvl.mode === 'list';
+            $('car-select-box').style.display = isListMode ? 'block' : 'none';
+            $('wheel-bonus-container').style.display = isListMode ? 'block' : 'none';
+            $('custom-price-check-container').style.display = isListMode ? 'block' : 'none';
+            $('custom-price-box').style.display = (!isListMode || $('custom-price-check')?.checked) ? 'block' : 'none';
+
+            if (isListMode) {
+                let carSel = $('car-select'), prevCar = carSel.value;
+                carSel.innerHTML = '';
+                let sorted = [...(lvl.cars || [])].sort((a, b) => a.name.localeCompare(b.name));
+                sorted.forEach(c => carSel.add(new Option(c.name, c.name)));
+                if (prevCar && sorted.some(c => c.name === prevCar)) carSel.value = prevCar;
+            }
             updateCarInfo();
         }
 
-        const getSelectedCar = () => level7Cars.find(c => c.name === $('car-select').value);
+        const getSelectedCar = () => (getCurrentLevelObj().cars || []).find(c => c.name === $('car-select').value);
 
         function updateCarInfo() {
-            let info = $('selected-car-info');
-            if (!info || $('level-select').value !== '7') { if (info) info.textContent = ""; return; }
+            let info = $('selected-car-info'), lvl = getCurrentLevelObj();
+            if (!info || lvl.mode === 'custom') { if (info) info.textContent = ""; return; }
             let car = getSelectedCar();
             if (!car) { info.textContent = ""; return; }
 
@@ -444,9 +724,9 @@
             if (snap.exists()) {
                 userData = snap.data();
                 userData.login = currentLogin;
-                ['history', 'resellerItems', 'diceHistory', 'courierHistory', 'houseHistory', 'debts'].forEach(k => { if (!userData[k]) userData[k] = []; });
+                ['history', 'resellerItems', 'diceHistory', 'courierHistory', 'houseHistory', 'debts', 'activityLogs'].forEach(k => { if (!userData[k]) userData[k] = []; });
             } else {
-                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [] };
+                userData = { login: currentLogin, history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], activityLogs: [] };
             }
             await saveUserData();
             renderState();
@@ -458,7 +738,12 @@
             await setDoc(doc(db, "users", currentUser.uid), userData, { merge: true });
         }
 
-        async function commitChange(msg, type = 'success', refreshRatings = true) {
+        async function commitChange(msg, type = 'success', refreshRatings = true, logTitle = "", logDetails = "") {
+            if (logTitle) {
+                let { date, time } = getMskNow();
+                userData.activityLogs.unshift({ id: Date.now() + Math.random(), date, time, action: logTitle, details: logDetails });
+                if (userData.activityLogs.length > 150) userData.activityLogs.length = 150;
+            }
             await saveUserData();
             renderState();
             if (refreshRatings) await loadGlobalRatings();
@@ -466,17 +751,19 @@
         }
 
         window.deleteRecord = async function(collectionKey, id, isIndex = false) {
+            let item = isIndex ? userData[collectionKey][id] : userData[collectionKey].find(x => x.id === id);
             if (isIndex) userData[collectionKey].splice(id, 1);
             else userData[collectionKey] = userData[collectionKey].filter(x => x.id !== id);
-            await commitChange("Запись удалена", "error");
+            await commitChange("Запись удалена", "error", true, `Удаление из ${collectionKey}`, item?.name || item?.person || fmt(item?.amount || item?.price || item?.earned));
         };
 
         async function addHouseRecord() {
             let amount = getCleanNumber('house-amount');
             if (amount <= 0) return showToast("Введите корректную сумму ограбления!", "error");
-            userData.houseHistory.unshift({ id: Date.now(), amount, ...getMskNow() });
+            let { shortTime: time, date } = getMskNow();
+            userData.houseHistory.unshift({ id: Date.now(), amount, time, date });
             $('house-amount').value = "";
-            await commitChange(`Ограбление дома учтено: +${fmt(amount)} ₽`);
+            await commitChange(`Ограбление дома учтено: +${fmt(amount)} ₽`, "success", true, "Добавлено ограбление дома", `+${fmt(amount)} ₽`);
         }
 
         async function addResellerItem() {
@@ -486,7 +773,7 @@
 
             userData.resellerItems.unshift({ id: Date.now(), name, buyPrice, sellPrice: 0, isRedemption, owner: isRedemption ? owner : "", startTime: Date.now(), status: "active" });
             $('res-name').value = ""; $('res-buy').value = ""; $('res-redemption').checked = false; $('res-owner').value = ""; $('res-owner-box').style.display = 'none';
-            await commitChange("Вещь добавлена в учет!");
+            await commitChange("Вещь добавлена в учет!", "success", true, "Добавлен лот (Перекуп)", `${name} за ${fmt(buyPrice)} ₽`);
         }
 
         window.toggleRedemptionBox = (cb) => { $('res-owner-box').style.display = cb.checked ? 'block' : 'none'; };
@@ -501,40 +788,48 @@
 
             item.sellPrice = sellPrice; item.status = "sold"; item.soldTime = Date.now();
             let profit = sellPrice - item.buyPrice;
-            await commitChange(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error");
+            await commitChange(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error", true, "Продажа вещи (Перекуп)", `${item.name}: продано за ${fmt(sellPrice)} ₽ (прибыль ${fmt(profit)} ₽)`);
         };
 
         async function addDebtRecord() {
             let person = $('debt-person').value.trim(), amount = getCleanNumber('debt-amount'), type = $('debt-type').value;
             if (!person || amount <= 0) return showToast("Заполните имя и сумму долга!", "error");
-            userData.debts.unshift({ id: Date.now(), person, amount, type, ...getMskNow() });
+            let { shortTime: time, date } = getMskNow();
+            userData.debts.unshift({ id: Date.now(), person, amount, type, time, date });
             $('debt-person').value = ""; $('debt-amount').value = "";
-            await commitChange("Долг записан!");
+            await commitChange("Долг записан!", "success", true, "Запись в долги", `${person}: ${fmt(amount)} ₽ (${type === 'i_owe' ? 'Я должен' : 'Мне должны'})`);
         }
 
         async function addCourierRecord() {
             let count = parseInt($('courier-count').value) || 0, pricePerOne = getCleanNumber('courier-price');
             if (count <= 0 || pricePerOne <= 0) return showToast("Введите количество и цену за 1 шт.!", "error");
-            let earned = count * pricePerOne;
-            userData.courierHistory.unshift({ id: Date.now(), count, pricePerOne, earned, ...getMskNow() });
+            let earned = count * pricePerOne, { shortTime: time, date } = getMskNow();
+            userData.courierHistory.unshift({ id: Date.now(), count, pricePerOne, earned, time, date });
             $('courier-count').value = ""; $('courier-price').value = "";
-            await commitChange(`Закладки учтены: +${fmt(earned)} ₽`);
+            await commitChange(`Закладки учтены: +${fmt(earned)} ₽`, "success", true, "Добавлены закладки", `${count} шт. (+${fmt(earned)} ₽)`);
         }
 
         async function addDiceGame() {
             let result = $('dice-result').value, amount = getCleanNumber('dice-amount');
             if (amount <= 0) return showToast("Введите сумму ставки!", "error");
-            userData.diceHistory.unshift({ id: Date.now(), result, amount, ...getMskNow() });
+            let { shortTime: time, date } = getMskNow();
+            userData.diceHistory.unshift({ id: Date.now(), result, amount, time, date });
             $('dice-amount').value = "";
-            await commitChange(result === 'win' ? `Победа: +${fmt(amount)} ₽` : `Проигрыш: -${fmt(amount)} ₽`, result === 'win' ? 'success' : 'error');
+            await commitChange(
+                result === 'win' ? `Победа: +${fmt(amount)} ₽` : `Проигрыш: -${fmt(amount)} ₽`,
+                result === 'win' ? 'success' : 'error',
+                true,
+                "Игра в кости (Казино)",
+                `${result === 'win' ? 'Выигрыш' : 'Проигрыш'} ${fmt(amount)} ₽`
+            );
         }
 
         async function startTheft() {
-            let level = $('level-select').value;
-            if (level === '1-6') {
+            let level = $('level-select').value, lvlObj = getCurrentLevelObj();
+            if (lvlObj.mode === 'custom') {
                 let customPrice = getCleanNumber('custom-theft-price');
                 if (customPrice <= 0) return showToast("Введите стоимость за авто!", "error");
-                userData.activeTheft = { level: '1-6', carName: `Авто (1-6 ур.)`, customPrice, bonusPercent: 0, startTime: Date.now() };
+                userData.activeTheft = { level, carName: `Авто (${lvlObj.name})`, customPrice, bonusPercent: 0, startTime: Date.now() };
                 $('custom-theft-price').value = "";
             } else {
                 let car = getSelectedCar();
@@ -542,13 +837,13 @@
                 if ($('custom-price-check')?.checked) {
                     let customPrice = getCleanNumber('custom-theft-price');
                     if (customPrice <= 0) return showToast("Введите свою сумму оплаты за авто!", "error");
-                    userData.activeTheft = { level: '7', carName: car.name, customPrice, bonusPercent: 0, startTime: Date.now() };
+                    userData.activeTheft = { level, carName: car.name, customPrice, bonusPercent: 0, startTime: Date.now() };
                     $('custom-theft-price').value = "";
                 } else {
-                    userData.activeTheft = { level: '7', carName: car.name, bonusPercent: getActiveBonusPercent(), startTime: Date.now() };
+                    userData.activeTheft = { level, carName: car.name, bonusPercent: getActiveBonusPercent(), startTime: Date.now() };
                 }
             }
-            await commitChange(`Угон начат: ${userData.activeTheft.carName}`, "success", false);
+            await commitChange(`Угон начат: ${userData.activeTheft.carName}`, "success", false, "Старт угона", `${userData.activeTheft.carName} (${level} ур.)`);
         }
 
         async function endTheft(caught = false) {
@@ -556,21 +851,23 @@
             let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
             let { carName: name, level, customPrice, bonusPercent } = userData.activeTheft;
             let bonusPct = bonusPercent || 0, duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
+            let { shortTime: time, date } = getMskNow();
 
             if (caught) {
-                userData.history.unshift({ name, level, duration, price: 0, status: 'caught', ...getMskNow() });
+                userData.history.unshift({ name, level, duration, price: 0, status: 'caught', time, date });
                 userData.activeTheft = null;
-                return commitChange("Поймали менты (0 ₽)", "error", false);
+                return commitChange("Поймали менты (0 ₽)", "error", false, "Провал угона (полиция)", `${name} (${duration})`);
             }
 
-            let price = (level !== '7' || customPrice)
-                ? (customPrice || 0)
-                : Math.round(((level7Cars.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0) * (1 + bonusPct / 100));
+            let lvlCars = siteConfig.theftLevels[level]?.cars || [];
+            let price = customPrice
+                ? customPrice
+                : Math.round(((lvlCars.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0) * (1 + bonusPct / 100));
 
-            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice && level === '7' ? `${name} (своя цена)` : name);
-            userData.history.unshift({ name: displayCarName, level, duration, price, status: 'success', ...getMskNow() });
+            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice && siteConfig.theftLevels[level]?.mode === 'list' ? `${name} (своя цена)` : name);
+            userData.history.unshift({ name: displayCarName, level, duration, price, status: 'success', time, date });
             userData.activeTheft = null;
-            await commitChange(`Авто сдано! +${fmt(price)} ₽`);
+            await commitChange(`Авто сдано! +${fmt(price)} ₽`, "success", true, "Успешная сдача угона", `${displayCarName}: +${fmt(price)} ₽ (${duration})`);
         }
 
         function updateTimers() {
@@ -689,7 +986,7 @@
 <body>
 
 <div class="container">
-    <h1>Помощник Россия Онлайн <span>by jaxxxxson</span></h1>
+    <h1><b id="main-title-text" style="font-weight:800;">Помощник Россия Онлайн</b> <span>by jaxxxxson</span></h1>
 
     <div id="auth-section" class="card auth-container">
         <h2>Вход / Регистрация</h2>
@@ -706,25 +1003,132 @@
             <button id="btn-logout" class="danger" style="width: auto; padding: 6px 14px; margin: 0;">Выйти</button>
         </div>
 
-        <div id="admin-panel" class="card admin-card" style="display:none;">
-            <h2>👑 Панель администратора</h2>
-            <input type="text" id="new-allowed-login" placeholder="Логин пользователя">
-            <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Дней:</label>
-            <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
-            <button id="btn-add-allowed">Выдать / продлить</button>
-            <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки (по возрастанию времени):</h3>
-            <table>
-                <thead><tr><th>Логин</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
-                <tbody id="allowed-list"><tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr></tbody>
-            </table>
+        <div class="nav-tabs">
+            <a href="/perekup" class="nav-btn active" id="nav-perekup" data-tab="perekup">📈 Перекуп</a>
+            <a href="/farm" class="nav-btn" id="nav-farm" data-tab="farm">💰 Фарм</a>
+            <a href="/casino" class="nav-btn" id="nav-casino" data-tab="casino">🎰 Казино</a>
+            <a href="/debts" class="nav-btn" id="nav-debts" data-tab="debts">💸 Долги</a>
+            <a href="/rating" class="nav-btn" id="nav-rating" data-tab="rating">🏆 Рейтинг</a>
+            <a href="/admin" class="nav-btn" id="nav-admin" data-tab="admin" style="display:none; border-color: rgba(245, 158, 11, 0.5);">👑 Админ-панель</a>
         </div>
 
-        <div class="nav-tabs">
-            <a href="/perekup" class="nav-btn active" data-tab="perekup">📈 Перекуп</a>
-            <a href="/farm" class="nav-btn" data-tab="farm">💰 Фарм</a>
-            <a href="/casino" class="nav-btn" data-tab="casino">🎰 Казино</a>
-            <a href="/debts" class="nav-btn" data-tab="debts">💸 Долги</a>
-            <a href="/rating" class="nav-btn" data-tab="rating">🏆 Рейтинг</a>
+        <!-- Раздел Админ-панель (Только для admin) -->
+        <div id="tab-admin" class="tab-content">
+            <div class="sub-tabs">
+                <div class="sub-tabs-links">
+                    <button type="button" class="sub-btn admin-sub active" data-admin-sub="subs">🔑 Подписки</button>
+                    <button type="button" class="sub-btn admin-sub" data-admin-sub="cars">🚗 Авто и Уровни</button>
+                    <button type="button" class="sub-btn admin-sub" data-admin-sub="fields">🗂 Разделы и Поля</button>
+                    <button type="button" class="sub-btn admin-sub" data-admin-sub="logs">📋 Логи игроков</button>
+                </div>
+            </div>
+
+            <!-- Админ 1: Подписки -->
+            <div id="admin-sub-subs" class="admin-content active">
+                <div class="card admin-card">
+                    <h2>🔑 Управление подписками</h2>
+                    <input type="text" id="new-allowed-login" placeholder="Логин пользователя">
+                    <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок (в днях):</label>
+                    <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
+                    <button id="btn-add-allowed">Выдать / продлить доступ</button>
+                    <h3 style="margin-top: 20px; font-size: 1rem;">Активные подписки (по возрастанию времени):</h3>
+                    <table>
+                        <thead><tr><th>Логин</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
+                        <tbody id="allowed-list"><tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Админ 2: Редактор уровней и авто -->
+            <div id="admin-sub-cars" class="admin-content">
+                <div class="card admin-card">
+                    <h2>🚗 Редактор уровней угона и автомобилей</h2>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                        <select id="admin-level-picker" style="margin-top:0; flex:1;"></select>
+                        <button type="button" id="btn-admin-add-level" class="secondary" style="width:auto; margin-top:0;">➕ Новый уровень</button>
+                        <button type="button" id="btn-admin-delete-level" class="danger" style="width:auto; margin-top:0;">🗑 Удалить</button>
+                    </div>
+
+                    <div class="grid-2" style="margin-top:15px;">
+                        <div>
+                            <label style="font-size:0.85rem; color:var(--text-muted);">Название уровня в списке:</label>
+                            <input type="text" id="admin-level-name">
+                        </div>
+                        <div>
+                            <label style="font-size:0.85rem; color:var(--text-muted);">Режим работы уровня:</label>
+                            <select id="admin-level-mode">
+                                <option value="list">Список автомобилей с ценами День/Ночь</option>
+                                <option value="custom">Ручной ввод суммы оплаты игроком</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-admin-save-level" style="margin-top:15px;">💾 Сохранить параметры уровня</button>
+                </div>
+
+                <div class="card admin-card" id="admin-cars-box">
+                    <h2>➕ Добавить автомобиль в выбранный уровень</h2>
+                    <div class="grid-3">
+                        <input type="text" id="adm-new-car-name" placeholder="Название авто (напр. Leslie P1)">
+                        <input type="text" id="adm-new-car-day" placeholder="Цена Днем (₽)" oninput="formatMoneyInput(this)">
+                        <input type="text" id="adm-new-car-night" placeholder="Цена Ночью (₽)" oninput="formatMoneyInput(this)">
+                    </div>
+                    <button type="button" id="btn-admin-add-car" style="margin-top:12px;">Добавить автомобиль</button>
+
+                    <h3 style="margin-top:25px; font-size:1rem;">Список машин уровня (можно менять название и цены прямо в таблице и жать 💾):</h3>
+                    <table>
+                        <thead><tr><th>Название авто</th><th>Днем (₽)</th><th>Ночью (₽)</th><th style="width:90px;">Действие</th></tr></thead>
+                        <tbody id="admin-cars-list"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Админ 3: Редактор разделов, подразделов и бонусов -->
+            <div id="admin-sub-fields" class="admin-content">
+                <div class="card admin-card">
+                    <h2>🗂 Редактор названий разделов, подразделов и бонусов</h2>
+                    <label style="font-size:0.85rem; color:var(--text-muted);">Главный заголовок сайта:</label>
+                    <input type="text" id="adm-lbl-title">
+
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Названия главных вкладок:</h3>
+                    <div class="grid-2">
+                        <input type="text" id="adm-lbl-perekup" placeholder="Вкладка Перекуп">
+                        <input type="text" id="adm-lbl-farm" placeholder="Вкладка Фарм">
+                        <input type="text" id="adm-lbl-casino" placeholder="Вкладка Казино">
+                        <input type="text" id="adm-lbl-debts" placeholder="Вкладка Долги">
+                        <input type="text" id="adm-lbl-rating" placeholder="Вкладка Рейтинг">
+                    </div>
+
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Названия подразделов Фарма:</h3>
+                    <div class="grid-3">
+                        <input type="text" id="adm-lbl-theft" placeholder="Угонщик">
+                        <input type="text" id="adm-lbl-courier" placeholder="Закладчик">
+                        <input type="text" id="adm-lbl-house" placeholder="Ограбление домов">
+                    </div>
+
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Проценты бонуса из колеса казино (через запятую):</h3>
+                    <input type="text" id="adm-wheel-bonuses" placeholder="20, 25, 30, 35">
+
+                    <button type="button" id="btn-admin-save-labels" style="margin-top:20px;">💾 Сохранить все названия и поля</button>
+                </div>
+            </div>
+
+            <!-- Админ 4: Логи действий пользователей -->
+            <div id="admin-sub-logs" class="admin-content">
+                <div class="card admin-card">
+                    <h2>📋 Логи действий всех пользователей</h2>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <select id="admin-log-user-filter" style="flex:1; margin-top:0;">
+                            <option value="all">Все пользователи</option>
+                        </select>
+                        <button type="button" id="btn-admin-refresh-logs" class="secondary" style="width:auto; margin-top:0;">🔄 Обновить</button>
+                        <button type="button" id="btn-admin-clear-logs" class="danger" style="width:auto; margin-top:0;">🧹 Очистить логи</button>
+                    </div>
+                    <table>
+                        <thead><tr><th style="width:140px;">Дата / Время</th><th style="width:120px;">Игрок</th><th>Действие / Клик</th><th>Подробности</th></tr></thead>
+                        <tbody id="admin-logs-list"><tr><td colspan="4" style="text-align:center;">Загрузка логов...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- Раздел Перекуп -->
@@ -797,9 +1201,9 @@
         <div id="tab-farm" class="tab-content">
             <div class="sub-tabs">
                 <div class="sub-tabs-links">
-                    <button type="button" class="sub-btn farm-sub active" data-farm-sub="theft">🚗 Угонщик</button>
-                    <button type="button" class="sub-btn farm-sub" data-farm-sub="courier">📦 Закладчик</button>
-                    <button type="button" class="sub-btn farm-sub" data-farm-sub="house">🏠 Ограбление домов</button>
+                    <button type="button" class="sub-btn farm-sub active" id="sub-btn-theft" data-farm-sub="theft">🚗 Угонщик</button>
+                    <button type="button" class="sub-btn farm-sub" id="sub-btn-courier" data-farm-sub="courier">📦 Закладчик</button>
+                    <button type="button" class="sub-btn farm-sub" id="sub-btn-house" data-farm-sub="house">🏠 Ограбление домов</button>
                 </div>
             </div>
 
@@ -835,12 +1239,7 @@
                             <span>Бонус из колеса казино (+% к оплате)</span>
                         </label>
                         <div id="wheel-bonus-select-box" style="display: none; margin-top: 10px;">
-                            <select id="wheel-bonus-select">
-                                <option value="20">+20% к оплате</option>
-                                <option value="25">+25% к оплате</option>
-                                <option value="30">+30% к оплате</option>
-                                <option value="35">+35% к оплате</option>
-                            </select>
+                            <select id="wheel-bonus-select"></select>
                         </div>
                     </div>
 
