@@ -64,10 +64,11 @@
         th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--card-border); font-size: 0.93rem; }
         th { color: var(--text-muted); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; }
         tr:last-child td { border-bottom: none; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 25px; }
-        .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px; padding: 20px; text-align: center; }
-        .stat-value { font-size: 1.8rem; font-weight: 800; color: var(--success); margin-top: 8px; }
-        .timer-display { font-size: 1.4rem; color: var(--accent); margin: 12px 0; font-weight: 800; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px; margin-bottom: 25px; }
+        .stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 18px; padding: 18px; text-align: center; }
+        .stat-value { font-size: 1.75rem; font-weight: 800; color: var(--success); margin-top: 8px; }
+        .stat-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 6px; }
+        .timer-display { font-size: 1.6rem; color: var(--accent); margin: 14px 0; font-weight: 800; letter-spacing: 1px; }
         .auth-container { max-width: 440px; margin: 70px auto; }
         .auth-mode-tabs { display: flex; gap: 8px; margin-bottom: 18px; background: rgba(3, 7, 18, 0.6); padding: 6px; border-radius: 14px; border: 1px solid var(--card-border); }
         .auth-tab-btn { flex: 1; margin: 0; padding: 10px; border-radius: 10px; background: transparent; color: var(--text-muted); box-shadow: none; font-size: 0.95rem; }
@@ -98,8 +99,9 @@
         .logs-pagination .page-btns { display: flex; gap: 8px; align-items: center; }
         .logs-pagination button { width: auto; margin-top: 0; padding: 8px 14px; font-size: 0.88rem; }
         .static-badge { color: var(--accent); font-weight: 700; font-size: 0.86rem; margin-left: 4px; }
-        .rating-filter-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: var(--card-bg); border: 1px solid var(--card-border); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 14px; margin-bottom: 25px; }
+        .rating-filter-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: var(--card-bg); border: 1px solid var(--card-border); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 14px; margin-bottom: 20px; }
         .rating-date-picker { width: auto; margin-top: 0; padding: 8px 12px; font-size: 0.9rem; border-color: var(--accent); }
+        .finish-box { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--card-border); animation: fadeIn 0.25s ease; }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -190,8 +192,8 @@
                 btnStartTheft: "Начать поиск / угон",
                 btnFinishTheft: "Закончить сдачу",
                 btnCaughtTheft: "Поймали менты",
-                btnAddCourier: "Засчитать и добавить в учет",
-                btnAddHouse: "Добавить ограбление",
+                btnAddCourier: "Начать развоз закладок",
+                btnAddHouse: "Начать ограбление дома",
                 btnAddDice: "Записать в историю",
                 btnAddDebt: "Добавить долг"
             },
@@ -231,13 +233,24 @@
         let currentUser = null, currentLogin = "";
         let isUserDataLoaded = false;
         let pendingRegistrationProfile = null;
-        let userData = { login: "", charName: "", staticId: "", history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: [] };
+        let userData = {
+            login: "", charName: "", staticId: "",
+            history: [], activeTheft: null,
+            courierHistory: [], activeCourier: null,
+            houseHistory: [], activeHouse: null,
+            resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
+        };
         let allUsersCache = [];
         let allowedUsersMapCache = {};
         let globalLogsCache = [];
         let adminLogsPage = 1;
-        let ratingPeriod = 'today'; // 'today' | 'week' | 'month' | 'all' | 'custom'
-        let ratingCustomDate = '';  // 'DD.MM.YYYY'
+
+        let ratingPeriod = 'today';
+        let ratingCustomDate = '';
+
+        let farmPeriod = 'today';
+        let farmCustomDate = '';
+
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
         function formatPublicPlayer(u) {
@@ -269,6 +282,69 @@
             $('btn-register').style.display = isReg ? 'block' : 'none';
         };
 
+        // Универсальная проверка попадания даты в выбранный период (для Фарма и для Рейтинга)
+        function checkDateInPeriod(dateStr, timestampMs, mode, customDateVal) {
+            if (mode === 'all') return true;
+            let todayStr = getMskNow().date;
+
+            if (!dateStr && timestampMs > 1000000000000) {
+                dateStr = new Date(timestampMs).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
+            }
+            let dStr = dateStr || todayStr;
+
+            if (mode === 'today') return dStr === todayStr;
+            if (mode === 'custom') return customDateVal ? dStr === customDateVal : dStr === todayStr;
+
+            let parts = dStr.split('.');
+            if (parts.length !== 3) return false;
+            let recDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            recDate.setHours(0, 0, 0, 0);
+
+            let tParts = todayStr.split('.');
+            let curDate = new Date(parseInt(tParts[2]), parseInt(tParts[1]) - 1, parseInt(tParts[0]));
+            curDate.setHours(0, 0, 0, 0);
+
+            let diffDays = (curDate - recDate) / 86400000;
+            if (mode === 'week') return diffDays >= 0 && diffDays < 7;
+            if (mode === 'month') return diffDays >= 0 && diffDays < 30;
+            return true;
+        }
+
+        function formatPeriodLabel(mode, customDateVal) {
+            if (mode === 'today') return 'за сегодня';
+            if (mode === 'week') return 'за 7 дней';
+            if (mode === 'month') return 'за 30 дней';
+            if (mode === 'all') return 'за всё время';
+            if (mode === 'custom') return customDateVal ? `за ${customDateVal}` : 'за дату';
+            return 'за период';
+        }
+
+        // Переключение периода в общем заработке Фарма
+        window.setFarmPeriod = function(period) {
+            farmPeriod = period;
+            document.querySelectorAll('.farm-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+            let dateInput = $('farm-custom-date');
+            if (dateInput) {
+                dateInput.style.display = period === 'custom' ? 'block' : 'none';
+                if (period === 'custom' && !dateInput.value) {
+                    dateInput.value = getMskNow().isoDate;
+                    let [y, m, d] = dateInput.value.split('-');
+                    farmCustomDate = `${d}.${m}.${y}`;
+                }
+            }
+            renderState();
+            if (isUserDataLoaded) logAction("Выбран период статистики фарма", period === 'custom' ? `Дата: ${farmCustomDate}` : period);
+        };
+
+        window.onFarmDateChange = function(input) {
+            if (!input.value) return;
+            let [y, m, d] = input.value.split('-');
+            farmCustomDate = `${d}.${m}.${y}`;
+            farmPeriod = 'custom';
+            document.querySelectorAll('.farm-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === 'custom'));
+            renderState();
+        };
+
         // Переключение периода в Рейтинге
         window.setRatingPeriod = function(period) {
             ratingPeriod = period;
@@ -296,42 +372,8 @@
             if (isUserDataLoaded) logAction("Выбрана дата в рейтинге", ratingCustomDate);
         };
 
-        function getRatingPeriodLabel() {
-            if (ratingPeriod === 'today') return 'за сегодня';
-            if (ratingPeriod === 'week') return 'за 7 дней';
-            if (ratingPeriod === 'month') return 'за 30 дней';
-            if (ratingPeriod === 'all') return 'за всё время';
-            if (ratingPeriod === 'custom') return ratingCustomDate ? `за ${ratingCustomDate}` : 'за дату';
-            return 'за период';
-        }
-
-        // Проверка попадания записи в выбранный период рейтинга
-        function isRecordInRatingPeriod(dateStr, timestampMs = 0) {
-            if (ratingPeriod === 'all') return true;
-            let todayStr = getMskNow().date;
-
-            if (!dateStr && timestampMs > 1000000000000) {
-                dateStr = new Date(timestampMs).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
-            }
-            let dStr = dateStr || todayStr;
-
-            if (ratingPeriod === 'today') return dStr === todayStr;
-            if (ratingPeriod === 'custom') return ratingCustomDate ? dStr === ratingCustomDate : dStr === todayStr;
-
-            let parts = dStr.split('.');
-            if (parts.length !== 3) return false;
-            let recDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-            recDate.setHours(0, 0, 0, 0);
-
-            let tParts = todayStr.split('.');
-            let curDate = new Date(parseInt(tParts[2]), parseInt(tParts[1]) - 1, parseInt(tParts[0]));
-            curDate.setHours(0, 0, 0, 0);
-
-            let diffDays = (curDate - recDate) / 86400000;
-            if (ratingPeriod === 'week') return diffDays >= 0 && diffDays < 7;
-            if (ratingPeriod === 'month') return diffDays >= 0 && diffDays < 30;
-            return true;
-        }
+        const isRecordInRatingPeriod = (dateStr, ts = 0) => checkDateInPeriod(dateStr, ts, ratingPeriod, ratingCustomDate);
+        const isRecordInFarmPeriod = (dateStr, ts = 0) => checkDateInPeriod(dateStr, ts, farmPeriod, farmCustomDate);
 
         async function logAction(action, details = "") {
             if (!currentUser || !currentLogin || !isUserDataLoaded) return;
@@ -429,8 +471,8 @@
                 'btn-start': L.btnStartTheft,
                 'btn-finish': L.btnFinishTheft,
                 'btn-caught': L.btnCaughtTheft,
-                'btn-add-courier': L.btnAddCourier,
-                'btn-add-house': L.btnAddHouse,
+                'btn-start-courier': L.btnAddCourier,
+                'btn-start-house': L.btnAddHouse,
                 'btn-add-dice': L.btnAddDice,
                 'btn-add-debt': L.btnAddDebt
             };
@@ -644,11 +686,17 @@
                 'btn-start': startTheft,
                 'btn-finish': () => endTheft(false),
                 'btn-caught': () => endTheft(true),
+                'btn-start-courier': startCourier,
+                'btn-open-finish-courier': openFinishCourierBox,
+                'btn-save-courier': finishCourier,
+                'btn-cancel-courier': cancelCourier,
+                'btn-start-house': startHouse,
+                'btn-open-finish-house': openFinishHouseBox,
+                'btn-save-house': finishHouse,
+                'btn-cancel-house': cancelHouse,
                 'btn-add-allowed': addAllowedUser,
                 'btn-add-reseller-item': addResellerItem,
                 'btn-add-dice': addDiceGame,
-                'btn-add-courier': addCourierRecord,
-                'btn-add-house': addHouseRecord,
                 'btn-add-debt': addDebtRecord,
                 'btn-admin-save-level': adminSaveLevelSettings,
                 'btn-admin-add-level': adminCreateNewLevel,
@@ -745,9 +793,8 @@
         }
 
         function renderRatings(list) {
-            let pLabel = getRatingPeriodLabel();
+            let pLabel = formatPeriodLabel(ratingPeriod, ratingCustomDate);
 
-            // Обновляем заголовки колонок под выбранный период
             if ($('th-theft-cnt')) $('th-theft-cnt').textContent = `Машин (${pLabel})`;
             if ($('th-theft-earn')) $('th-theft-earn').textContent = `Заработано (${pLabel})`;
             if ($('th-courier-cnt')) $('th-courier-cnt').textContent = `Закладок (${pLabel})`;
@@ -851,7 +898,6 @@
                 }
             });
 
-            // Если выбран конкретный день/период (не "всё время"), скрываем тех, у кого за этот период 0 активности в Угоне/Фарме/Перекупе, либо сортируем их вниз
             const fillTable = (id, data, sortKey, secondaryKey, rowBuilder, hideZeroInCustom = false) => {
                 let arr = Object.keys(data || {}).map(login => ({ login, ...data[login] }));
                 if (hideZeroInCustom && ratingPeriod === 'custom') {
@@ -1323,11 +1369,11 @@
                 });
 
                 (u.courierHistory || []).forEach(c => {
-                    pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽`, 'farm_other');
+                    pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽ (${c.duration || '—'})`, 'farm_other');
                 });
 
                 (u.houseHistory || []).forEach(h => {
-                    pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽`, 'farm_other');
+                    pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽ (${h.duration || '—'})`, 'farm_other');
                 });
 
                 (u.diceHistory || []).forEach(d => {
@@ -1530,7 +1576,10 @@
                     login: currentLogin,
                     charName: pendingRegistrationProfile?.charName || (currentLogin === ADMIN_LOGIN ? "Евгений Дубровский" : ""),
                     staticId: pendingRegistrationProfile?.staticId || (currentLogin === ADMIN_LOGIN ? "878" : ""),
-                    history: [], activeTheft: null, resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {}, activityLogs: []
+                    history: [], activeTheft: null,
+                    courierHistory: [], activeCourier: null,
+                    houseHistory: [], activeHouse: null,
+                    resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
                 };
                 pendingRegistrationProfile = null;
             }
@@ -1560,14 +1609,84 @@
             await commitChange("Запись удалена", "error", true, `Удаление из ${collectionKey}`, item?.name || item?.person || fmt(item?.amount || item?.price || item?.earned));
         };
 
-        async function addHouseRecord() {
+        // ==================== ТАЙМЕР И ЛОГИКА ОГРАБЛЕНИЯ ДОМОВ ====================
+        async function startHouse() {
+            userData.activeHouse = { startTime: Date.now() };
+            $('house-finish-inputs').style.display = 'none';
+            await commitChange("Ограбление дома начато! Таймер запущен.", "success", false, "Старт ограбления дома", "Таймер запущен");
+        }
+
+        function openFinishHouseBox() {
+            $('house-finish-inputs').style.display = 'block';
+            if (siteConfig.defaults.houseAmount > 0 && !$('house-amount').value) {
+                $('house-amount').value = fmt(siteConfig.defaults.houseAmount);
+            }
+            $('house-amount').focus();
+        }
+
+        async function finishHouse() {
+            if (!userData.activeHouse) return;
             let amount = getCleanNumber('house-amount');
             if (amount <= 0) return showToast("Введите корректную сумму ограбления!", "error");
+
+            let sec = Math.floor((Date.now() - userData.activeHouse.startTime) / 1000);
+            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
             let { shortTime: time, date } = getMskNow();
-            userData.houseHistory.unshift({ id: Date.now(), amount, time, date });
-            $('house-amount').value = siteConfig.defaults.houseAmount > 0 ? fmt(siteConfig.defaults.houseAmount) : "";
-            await commitChange(`Ограбление дома учтено: +${fmt(amount)} ₽`, "success", true, "Добавлено ограбление дома", `+${fmt(amount)} ₽`);
+
+            userData.houseHistory.unshift({ id: Date.now(), amount, duration, time, date });
+            userData.activeHouse = null;
+            $('house-amount').value = "";
+            $('house-finish-inputs').style.display = 'none';
+            await commitChange(`Ограбление завершено за ${duration}: +${fmt(amount)} ₽`, "success", true, "Завершено ограбление дома", `+${fmt(amount)} ₽ (${duration})`);
         }
+
+        async function cancelHouse() {
+            if (!userData.activeHouse) return;
+            userData.activeHouse = null;
+            $('house-finish-inputs').style.display = 'none';
+            await commitChange("Ограбление дома отменено", "error", false, "Отмена ограбления дома", "0 ₽");
+        }
+
+        // ==================== ТАЙМЕР И ЛОГИКА ЗАКЛАДЧИКА ====================
+        async function startCourier() {
+            userData.activeCourier = { startTime: Date.now() };
+            $('courier-finish-inputs').style.display = 'none';
+            await commitChange("Развоз закладок начат! Таймер запущен.", "success", false, "Старт развоза закладок", "Таймер запущен");
+        }
+
+        function openFinishCourierBox() {
+            $('courier-finish-inputs').style.display = 'block';
+            if (siteConfig.defaults.courierPrice > 0 && !$('courier-price').value) {
+                $('courier-price').value = fmt(siteConfig.defaults.courierPrice);
+            }
+            $('courier-count').focus();
+        }
+
+        async function finishCourier() {
+            if (!userData.activeCourier) return;
+            let count = parseInt($('courier-count').value) || 0;
+            let pricePerOne = getCleanNumber('courier-price');
+            if (count <= 0 || pricePerOne <= 0) return showToast("Введите количество развезённых закладок и цену за 1 шт.!", "error");
+
+            let sec = Math.floor((Date.now() - userData.activeCourier.startTime) / 1000);
+            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
+            let earned = count * pricePerOne;
+            let { shortTime: time, date } = getMskNow();
+
+            userData.courierHistory.unshift({ id: Date.now(), count, pricePerOne, earned, duration, time, date });
+            userData.activeCourier = null;
+            $('courier-count').value = "";
+            $('courier-finish-inputs').style.display = 'none';
+            await commitChange(`Развоз завершен за ${duration}: +${fmt(earned)} ₽`, "success", true, "Завершен развоз закладок", `${count} шт. × ${fmt(pricePerOne)} ₽ = +${fmt(earned)} ₽ (${duration})`);
+        }
+
+        async function cancelCourier() {
+            if (!userData.activeCourier) return;
+            userData.activeCourier = null;
+            $('courier-finish-inputs').style.display = 'none';
+            await commitChange("Развоз закладок отменен", "error", false, "Отмена развоза закладок", "0 ₽");
+        }
+        // ====================================================================
 
         async function addResellerItem() {
             let name = $('res-name').value.trim(), buyPrice = getCleanNumber('res-buy');
@@ -1601,16 +1720,6 @@
             userData.debts.unshift({ id: Date.now(), person, amount, type, time, date });
             $('debt-person').value = ""; $('debt-amount').value = "";
             await commitChange("Долг записан!", "success", true, "Запись в долги", `${person}: ${fmt(amount)} ₽ (${type === 'i_owe' ? 'Я должен' : 'Мне должны'})`);
-        }
-
-        async function addCourierRecord() {
-            let count = parseInt($('courier-count').value) || 0, pricePerOne = getCleanNumber('courier-price');
-            if (count <= 0 || pricePerOne <= 0) return showToast("Введите количество и цену за 1 шт.!", "error");
-            let earned = count * pricePerOne, { shortTime: time, date } = getMskNow();
-            userData.courierHistory.unshift({ id: Date.now(), count, pricePerOne, earned, time, date });
-            $('courier-count').value = "";
-            $('courier-price').value = siteConfig.defaults.courierPrice > 0 ? fmt(siteConfig.defaults.courierPrice) : "";
-            await commitChange(`Закладки учтены: +${fmt(earned)} ₽`, "success", true, "Добавлены закладки", `${count} шт. (+${fmt(earned)} ₽)`);
         }
 
         async function addDiceGame() {
@@ -1674,10 +1783,20 @@
             await commitChange(`Авто сдано! +${fmt(price)} ₽`, "success", true, "Успешная сдача угона", `${displayCarName}: +${fmt(price)} ₽ (${duration})`);
         }
 
+        const fmtTimerClock = (startTime) => {
+            let sec = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+            return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+        };
+
         function updateTimers() {
             if (userData.activeTheft && $('active-timer')) {
-                let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
-                $('active-timer').textContent = String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+                $('active-timer').textContent = fmtTimerClock(userData.activeTheft.startTime);
+            }
+            if (userData.activeCourier && $('active-courier-timer')) {
+                $('active-courier-timer').textContent = fmtTimerClock(userData.activeCourier.startTime);
+            }
+            if (userData.activeHouse && $('active-house-timer')) {
+                $('active-house-timer').textContent = fmtTimerClock(userData.activeHouse.startTime);
             }
             document.querySelectorAll('.res-timer').forEach(el => {
                 let st = parseInt(el.dataset.start);
@@ -1700,18 +1819,67 @@
             let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : displayLogin;
             if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${displayLogin}]</small>`;
 
+            // Панель активного угона
             if (userData.activeTheft) {
                 $('active-panel').style.display = 'block';
                 $('start-panel').style.display = 'none';
                 let bonusStr = userData.activeTheft.bonusPercent ? ` [Бонус +${userData.activeTheft.bonusPercent}%]` : '';
                 let priceInfo = userData.activeTheft.customPrice ? ` — ${fmt(userData.activeTheft.customPrice)} ₽` : ` (${userData.activeTheft.level} ур.)${bonusStr}`;
                 $('active-car-name').textContent = `${userData.activeTheft.carName}${priceInfo}`;
-                updateTimers();
             } else {
                 $('active-panel').style.display = 'none';
                 $('start-panel').style.display = 'block';
             }
 
+            // Панель активного развоза закладок
+            if (userData.activeCourier) {
+                $('active-courier-panel').style.display = 'block';
+                $('start-courier-panel').style.display = 'none';
+            } else {
+                $('active-courier-panel').style.display = 'none';
+                $('start-courier-panel').style.display = 'block';
+            }
+
+            // Панель активного ограбления дома
+            if (userData.activeHouse) {
+                $('active-house-panel').style.display = 'block';
+                $('start-house-panel').style.display = 'none';
+            } else {
+                $('active-house-panel').style.display = 'none';
+                $('start-house-panel').style.display = 'block';
+            }
+            updateTimers();
+
+            // ==================== ОБЩАЯ ВЫРУЧКА СО ВСЕГО ФАРМА ЗА ВЫБРАННЫЙ ПЕРИОД ====================
+            let fLabel = formatPeriodLabel(farmPeriod, farmCustomDate);
+            if ($('farm-total-period-label')) $('farm-total-period-label').textContent = `Общая выручка со всего фарма (${fLabel})`;
+
+            let fTheftList = (userData.history || []).filter(h => h.status !== 'caught' && isRecordInFarmPeriod(h.date, h.id));
+            let fCourierList = (userData.courierHistory || []).filter(c => isRecordInFarmPeriod(c.date, c.id));
+            let fHouseList = (userData.houseHistory || []).filter(h => isRecordInFarmPeriod(h.date, h.id));
+
+            let fTheftSum = sumBy(fTheftList, h => h.price);
+            let fCourierSum = sumBy(fCourierList, c => c.earned);
+            let fHouseSum = sumBy(fHouseList, h => h.amount);
+
+            let fCustomSum = 0, fCustomTasks = 0;
+            (siteConfig.customSections || []).forEach(sec => {
+                if (sec.placement === 'farm' && sec.enabled !== false) {
+                    let recs = (userData.customRecords?.[sec.id] || []).filter(r => isRecordInFarmPeriod(r.date, r.id));
+                    fCustomSum += sumBy(recs, r => r.amount);
+                    fCustomTasks += sumBy(recs, r => r.count || 1);
+                }
+            });
+
+            let fTotalAll = fTheftSum + fCourierSum + fHouseSum + fCustomSum;
+            let fCourierCount = sumBy(fCourierList, c => c.count);
+
+            if ($('farm-total-earned-all')) $('farm-total-earned-all').textContent = fmt(fTotalAll) + ' ₽';
+            if ($('farm-total-breakdown')) {
+                $('farm-total-breakdown').innerHTML = `🚗 Угон: <b>${fmt(fTheftSum)} ₽</b> (${fTheftList.length} авто) &nbsp;|&nbsp; 📦 Закладки: <b>${fmt(fCourierSum)} ₽</b> (${fCourierCount} шт.) &nbsp;|&nbsp; 🏠 Дома: <b>${fmt(fHouseSum)} ₽</b> (${fHouseList.length} дом.)${fCustomSum > 0 ? ` &nbsp;|&nbsp; Доп: <b>${fmt(fCustomSum)} ₽</b>` : ''}`;
+            }
+
+            // Показатели внутри подразделов за сегодня
             let today = getMskNow().date;
             let todayH = (userData.history || []).filter(h => (h.date || today) === today && h.status !== 'caught');
             $('today-count').textContent = todayH.length;
@@ -1764,14 +1932,15 @@
             let cList = userData.courierHistory || [], todayC = cList.filter(c => (c.date || today) === today);
             $('courier-today-count').textContent = sumBy(todayC, c => c.count);
             $('courier-today-earned').textContent = fmt(sumBy(todayC, c => c.earned)) + ' ₽';
-            renderList('courier-history-list', cList, "История закладок пуста", 5, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">${fmt(i.earned)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('courierHistory', ${i.id})">✕</button></td></tr>
+            renderList('courier-history-list', cList, "История закладок пуста", 6, i => `
+                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.earned)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('courierHistory', ${i.id})">✕</button></td></tr>
             `);
 
             let hList = userData.houseHistory || [], todayHList = hList.filter(h => (h.date || today) === today);
+            $('house-today-count').textContent = todayHList.length;
             $('house-today-earned').textContent = fmt(sumBy(todayHList, h => h.amount)) + ' ₽';
-            renderList('house-history-list', hList, "История ограблений пуста", 3, i => `
-                <tr><td>${i.date} ${i.time}</td><td style="color:var(--success);font-weight:bold;">${fmt(i.amount)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('houseHistory', ${i.id})">✕</button></td></tr>
+            renderList('house-history-list', hList, "История ограблений пуста", 4, i => `
+                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.amount)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('houseHistory', ${i.id})">✕</button></td></tr>
             `);
 
             let dice = userData.diceHistory || [];
@@ -2009,8 +2178,8 @@
                         <div><small style="color:var(--text-muted);">Кнопка старта угона:</small><input type="text" id="adm-btnStartTheft"></div>
                         <div><small style="color:var(--text-muted);">Кнопка успешной сдачи угона:</small><input type="text" id="adm-btnFinishTheft"></div>
                         <div><small style="color:var(--text-muted);">Кнопка провала угона (полиция):</small><input type="text" id="adm-btnCaughtTheft"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка добавления закладок:</small><input type="text" id="adm-btnAddCourier"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка добавления дома:</small><input type="text" id="adm-btnAddHouse"></div>
+                        <div><small style="color:var(--text-muted);">Кнопка старта развоза закладок:</small><input type="text" id="adm-btnAddCourier"></div>
+                        <div><small style="color:var(--text-muted);">Кнопка старта ограбления дома:</small><input type="text" id="adm-btnAddHouse"></div>
                         <div><small style="color:var(--text-muted);">Кнопка записи игры в казино:</small><input type="text" id="adm-btnAddDice"></div>
                         <div><small style="color:var(--text-muted);">Кнопка добавления долга:</small><input type="text" id="adm-btnAddDebt"></div>
                     </div>
@@ -2156,6 +2325,24 @@
 
         <!-- Раздел Фарм -->
         <div id="tab-farm" class="tab-content">
+            <!-- Общая сводка заработка со всего фарма за выбранный период -->
+            <div class="rating-filter-bar">
+                <div class="sub-tabs-links">
+                    <button type="button" class="sub-btn farm-period-btn active" data-period="today" onclick="setFarmPeriod('today')">📅 За сегодня</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="week" onclick="setFarmPeriod('week')">📆 За неделю</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="month" onclick="setFarmPeriod('month')">🗓 За месяц</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="all" onclick="setFarmPeriod('all')">♾ За всё время</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="custom" onclick="setFarmPeriod('custom')">🔍 Выбрать дату</button>
+                </div>
+                <input type="date" id="farm-custom-date" class="rating-date-picker" style="display:none;" onchange="onFarmDateChange(this)">
+            </div>
+
+            <div class="stat-card" style="margin-bottom: 25px; border-color: rgba(245, 158, 11, 0.35); background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, rgba(17, 24, 39, 0.8) 100%);">
+                <div id="farm-total-period-label" style="font-weight: 700; color: var(--accent);">Общая выручка со всего фарма (за сегодня)</div>
+                <div id="farm-total-earned-all" class="stat-value" style="font-size: 2.2rem;">0 ₽</div>
+                <div id="farm-total-breakdown" class="stat-sub">🚗 Угон: 0 ₽ | 📦 Закладки: 0 ₽ | 🏠 Дома: 0 ₽</div>
+            </div>
+
             <div class="sub-tabs">
                 <div class="sub-tabs-links" id="farm-sub-links">
                     <button type="button" class="sub-btn farm-sub active" id="sub-btn-theft" data-farm-sub="theft">🚗 Угонщик</button>
@@ -2169,10 +2356,10 @@
                 <div class="clock-box">Московское время: <span id="msk-time" class="time-val">--:--:--</span> | <span id="time-status" style="font-weight: bold;">--</span></div>
                 <div class="stats-grid">
                     <div class="stat-card"><div>Угонов за сегодня</div><div id="today-count" class="stat-value">0</div></div>
-                    <div class="stat-card"><div>Заработано за сегодня</div><div id="today-earned" class="stat-value">0 ₽</div></div>
+                    <div class="stat-card"><div>Заработано за сегодня (Угон)</div><div id="today-earned" class="stat-value">0 ₽</div></div>
                 </div>
                 <div class="card" id="active-panel" style="display:none;">
-                    <h2>Активный угон</h2>
+                    <h2>🚗 Активный угон</h2>
                     <p>Автомобиль: <strong id="active-car-name"></strong></p>
                     <div id="active-timer" class="timer-display">00:00</div>
                     <div class="button-group">
@@ -2224,43 +2411,80 @@
                 </div>
             </div>
 
-            <!-- Подраздел: Закладчик -->
+            <!-- Подраздел: Закладчик (С таймером развоза) -->
             <div id="farm-sub-courier" class="farm-content">
                 <div class="stats-grid">
                     <div class="stat-card"><div>Закладок за сегодня</div><div id="courier-today-count" class="stat-value">0</div></div>
-                    <div class="stat-card"><div>Заработано за сегодня</div><div id="courier-today-earned" class="stat-value">0 ₽</div></div>
+                    <div class="stat-card"><div>Заработано за сегодня (Закладки)</div><div id="courier-today-earned" class="stat-value">0 ₽</div></div>
                 </div>
-                <div class="card">
-                    <h2>📦 Добавить развоз закладок</h2>
-                    <label>Количество развезённых закладок:</label><input type="number" id="courier-count" placeholder="Например, 15">
-                    <label style="margin-top: 15px; display: block;">Оплата за 1 закладку (₽):</label><input type="text" id="courier-price" placeholder="Например, 12 000" oninput="formatMoneyInput(this)">
-                    <button id="btn-add-courier" style="margin-top: 15px;">Засчитать и добавить в учет</button>
+
+                <div class="card" id="active-courier-panel" style="display:none;">
+                    <h2>📦 Активный развоз закладок</h2>
+                    <p style="color:var(--text-muted); margin-bottom:4px;">Время в пути:</p>
+                    <div id="active-courier-timer" class="timer-display">00:00</div>
+                    <div class="button-group">
+                        <button type="button" id="btn-open-finish-courier" style="flex:1;">Закончить развоз</button>
+                        <button type="button" id="btn-cancel-courier" class="danger" style="flex:1;">Отменить развоз</button>
+                    </div>
+
+                    <div id="courier-finish-inputs" class="finish-box" style="display:none;">
+                        <label>Количество развезённых закладок:</label>
+                        <input type="number" id="courier-count" placeholder="Например, 15">
+                        <label style="margin-top: 15px; display: block;">Сумма за 1 закладку (₽):</label>
+                        <input type="text" id="courier-price" placeholder="Например, 12 000" oninput="formatMoneyInput(this)">
+                        <button type="button" id="btn-save-courier" style="margin-top: 15px;">✅ Подтвердить и сохранить в статистику</button>
+                    </div>
                 </div>
+
+                <div class="card" id="start-courier-panel">
+                    <h2>📦 Развоз закладок</h2>
+                    <p style="color:var(--text-muted); margin-top:0;">Нажмите кнопку ниже, когда берете задание на закладки, чтобы запустить секундомер:</p>
+                    <button type="button" id="btn-start-courier">Начать развоз закладок</button>
+                </div>
+
                 <div class="card">
                     <h2>История закладок</h2>
                     <table>
-                        <thead><tr><th>Время</th><th>Кол-во</th><th>Цена за 1 шт.</th><th>Заработано</th><th style="width: 40px;"></th></tr></thead>
-                        <tbody id="courier-history-list"><tr><td colspan="5" style="text-align: center;">Пусто</td></tr></tbody>
+                        <thead><tr><th>Дата / Время</th><th>Затрачено</th><th>Кол-во</th><th>Цена за 1 шт.</th><th>Заработано</th><th style="width: 40px;"></th></tr></thead>
+                        <tbody id="courier-history-list"><tr><td colspan="6" style="text-align: center;">Пусто</td></tr></tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Подраздел: Ограбление домов -->
+            <!-- Подраздел: Ограбление домов (С таймером ограбления) -->
             <div id="farm-sub-house" class="farm-content">
                 <div class="stats-grid">
+                    <div class="stat-card"><div>Домов за сегодня</div><div id="house-today-count" class="stat-value">0</div></div>
                     <div class="stat-card"><div>Заработано за сегодня (Дома)</div><div id="house-today-earned" class="stat-value">0 ₽</div></div>
                 </div>
-                <div class="card">
-                    <h2>🏠 Добавить ограбление дома</h2>
-                    <label>Сумма за ограбление дома (₽):</label>
-                    <input type="text" id="house-amount" placeholder="Например, 45 000" oninput="formatMoneyInput(this)">
-                    <button id="btn-add-house" style="margin-top: 15px;">Добавить ограбление</button>
+
+                <div class="card" id="active-house-panel" style="display:none;">
+                    <h2>🏠 Активное ограбление дома</h2>
+                    <p style="color:var(--text-muted); margin-bottom:4px;">Время выполнения:</p>
+                    <div id="active-house-timer" class="timer-display">00:00</div>
+                    <div class="button-group">
+                        <button type="button" id="btn-open-finish-house" style="flex:1;">Закончить ограбление</button>
+                        <button type="button" id="btn-cancel-house" class="danger" style="flex:1;">Отменить</button>
+                    </div>
+
+                    <div id="house-finish-inputs" class="finish-box" style="display:none;">
+                        <label>Полученная сумма за ограбление дома (₽):</label>
+                        <input type="text" id="house-amount" placeholder="Например, 45 000" oninput="formatMoneyInput(this)">
+                        <button type="button" id="btn-save-house" style="margin-top: 15px;">✅ Подтвердить и сохранить в статистику</button>
+                    </div>
                 </div>
+
+                <div class="card" id="start-house-panel">
+                    <h2>🏠 Ограбление дома</h2>
+                    <p style="color:var(--text-muted); margin-top:0;">Нажмите кнопку ниже при старте задания, чтобы запустить таймер ограбления:</p>
+                    <button type="button" id="btn-start-house">Начать ограбление дома</button>
+                </div>
+
                 <div class="card">
                     <h2>История ограблений домов</h2>
                     <table>
-                        <thead><tr><th>Дата / Время</th><th>Заработано</th><th style="width: 40px;"></th></tr></thead>
-                        <tbody id="house-history-list"><tr><td colspan="3" style="text-align: center;">Пусто</td></tr></tbody>
+                        <thead><tr><th>Дата / Время</th><th>Затрачено</th><th>Заработано</th><th style="width: 40px;"></th></tr></thead>
+                        <tbody id="house-history-list"><tr><td colspan="4" style="text-align: center;">Пусто</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -2311,7 +2535,7 @@
             </div>
         </div>
 
-        <!-- Раздел Рейтинг (С фильтром периодов и выбором конкретной даты) -->
+        <!-- Раздел Рейтинг -->
         <div id="tab-rating" class="tab-content">
             <div class="rating-filter-bar">
                 <div class="sub-tabs-links">
