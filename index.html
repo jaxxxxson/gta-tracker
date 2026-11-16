@@ -102,6 +102,9 @@
         .rating-filter-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; background: var(--card-bg); border: 1px solid var(--card-border); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 14px; margin-bottom: 20px; }
         .rating-date-picker { width: auto; margin-top: 0; padding: 8px 12px; font-size: 0.9rem; border-color: var(--accent); }
         .finish-box { margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--card-border); animation: fadeIn 0.25s ease; }
+        .sell-inline-box { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
+        .sell-inline-box input { width: 120px; margin: 0; padding: 6px 10px; font-size: 0.85rem; }
+        .sell-inline-box button { width: auto; margin: 0; padding: 6px 10px; font-size: 0.8rem; }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -132,7 +135,7 @@
 
         const $ = (id) => document.getElementById(id);
         const fmt = (n) => (Number(n) || 0).toLocaleString('ru-RU');
-        const sumBy = (arr, fn) => arr.reduce((s, x) => s + (fn(x) || 0), 0);
+        const sumBy = (arr, fn) => (arr || []).reduce((s, x) => s + (Number(fn(x)) || 0), 0);
         const loginToEmail = (l) => l.trim().toLowerCase() + "@gta-tracker.local";
         const isNight = (d = new Date()) => { let m = d.getHours() * 60 + d.getMinutes(); return m >= 60 && m < 540; };
         const getMskNow = () => {
@@ -146,10 +149,13 @@
                 isoDate: `${yyyy}-${mm}-${dd}`
             };
         };
-        const getCleanNumber = (id) => parseFloat($(id)?.value.replace(/\s/g, '')) || 0;
+        // Безопасная очистка числа от любых пробелов (включая неразрывные \u00A0)
+        const cleanNumStr = (str) => parseFloat(String(str || '').replace(/[^\d.-]/g, '')) || 0;
+        const getCleanNumber = (id) => cleanNumStr($(id)?.value);
+
         const renderList = (id, arr, emptyMsg, cols, fn) => {
             let el = $(id);
-            if (el) el.innerHTML = arr.length ? arr.map(fn).join('') : `<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);">${emptyMsg}</td></tr>`;
+            if (el) el.innerHTML = arr?.length ? arr.map(fn).join('') : `<tr><td colspan="${cols}" style="text-align:center;color:var(--text-muted);">${emptyMsg}</td></tr>`;
         };
         const setSignedVal = (id, val) => {
             let el = $(id);
@@ -202,12 +208,7 @@
                 subCabinet: true, subProperty: true, subLedger: true, subAnalytics: true,
                 subTheft: true, subCourier: true, subHouse: true
             },
-            defaults: {
-                courierPrice: 0,
-                houseAmount: 0,
-                lowLevelTheftPrice: 0,
-                diceBet: 0
-            },
+            defaults: { courierPrice: 0, houseAmount: 0, lowLevelTheftPrice: 0, diceBet: 0 },
             wheelBonuses: [20, 25, 30, 35],
             customSections: [],
             theftLevels: {
@@ -233,6 +234,7 @@
         let currentUser = null, currentLogin = "";
         let isUserDataLoaded = false;
         let pendingRegistrationProfile = null;
+        let sellingItemId = null; // ID лота, для которого сейчас открыто встроенное поле продажи
         let userData = {
             login: "", charName: "", staticId: "",
             history: [], activeTheft: null,
@@ -244,13 +246,8 @@
         let allowedUsersMapCache = {};
         let globalLogsCache = [];
         let adminLogsPage = 1;
-
-        let ratingPeriod = 'today';
-        let ratingCustomDate = '';
-
-        let farmPeriod = 'today';
-        let farmCustomDate = '';
-
+        let ratingPeriod = 'today', ratingCustomDate = '';
+        let farmPeriod = 'today', farmCustomDate = '';
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
         function formatPublicPlayer(u) {
@@ -282,16 +279,13 @@
             $('btn-register').style.display = isReg ? 'block' : 'none';
         };
 
-        // Универсальная проверка попадания даты в выбранный период (для Фарма и для Рейтинга)
         function checkDateInPeriod(dateStr, timestampMs, mode, customDateVal) {
             if (mode === 'all') return true;
             let todayStr = getMskNow().date;
-
             if (!dateStr && timestampMs > 1000000000000) {
                 dateStr = new Date(timestampMs).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
             }
             let dStr = dateStr || todayStr;
-
             if (mode === 'today') return dStr === todayStr;
             if (mode === 'custom') return customDateVal ? dStr === customDateVal : dStr === todayStr;
 
@@ -319,7 +313,6 @@
             return 'за период';
         }
 
-        // Переключение периода в общем заработке Фарма
         window.setFarmPeriod = function(period) {
             farmPeriod = period;
             document.querySelectorAll('.farm-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
@@ -333,7 +326,7 @@
                 }
             }
             renderState();
-            if (isUserDataLoaded) logAction("Выбран период статистики фарма", period === 'custom' ? `Дата: ${farmCustomDate}` : period);
+            logAction("Выбран период статистики фарма", period === 'custom' ? `Дата: ${farmCustomDate}` : period);
         };
 
         window.onFarmDateChange = function(input) {
@@ -345,7 +338,6 @@
             renderState();
         };
 
-        // Переключение периода в Рейтинге
         window.setRatingPeriod = function(period) {
             ratingPeriod = period;
             document.querySelectorAll('.rating-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
@@ -359,7 +351,7 @@
                 }
             }
             renderRatings(allUsersCache);
-            if (isUserDataLoaded) logAction("Выбран период рейтинга", period === 'custom' ? `Дата: ${ratingCustomDate}` : period);
+            logAction("Выбран период рейтинга", period === 'custom' ? `Дата: ${ratingCustomDate}` : period);
         };
 
         window.onRatingDateChange = function(input) {
@@ -369,13 +361,14 @@
             ratingPeriod = 'custom';
             document.querySelectorAll('.rating-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === 'custom'));
             renderRatings(allUsersCache);
-            if (isUserDataLoaded) logAction("Выбрана дата в рейтинге", ratingCustomDate);
+            logAction("Выбрана дата в рейтинге", ratingCustomDate);
         };
 
         const isRecordInRatingPeriod = (dateStr, ts = 0) => checkDateInPeriod(dateStr, ts, ratingPeriod, ratingCustomDate);
         const isRecordInFarmPeriod = (dateStr, ts = 0) => checkDateInPeriod(dateStr, ts, farmPeriod, farmCustomDate);
 
-        async function logAction(action, details = "") {
+        // Фоновое неблокирующее логирование
+        function logAction(action, details = "", skipUserSave = false) {
             if (!currentUser || !currentLogin || !isUserDataLoaded) return;
             if (!userData.activityLogs) userData.activityLogs = [];
             let { date, time } = getMskNow();
@@ -385,18 +378,20 @@
             userData.activityLogs.unshift(entry);
             if (userData.activityLogs.length > 200) userData.activityLogs.length = 200;
 
-            try {
-                await setDoc(doc(db, "users", currentUser.uid), { login: safeLogin, activityLogs: userData.activityLogs }, { merge: true });
-            } catch (e) { console.error(e); }
+            if (!skipUserSave) {
+                setDoc(doc(db, "users", currentUser.uid), { login: safeLogin, activityLogs: userData.activityLogs }, { merge: true }).catch(console.error);
+            }
 
-            try {
-                let gRef = doc(db, "system", "logs");
-                let gSnap = await getDoc(gRef);
-                let gEntries = gSnap.exists() ? (gSnap.data().entries || []) : [];
-                gEntries.unshift(entry);
-                if (gEntries.length > 500) gEntries.length = 500;
-                await setDoc(gRef, { entries: gEntries }, { merge: true });
-            } catch (e) {}
+            (async () => {
+                try {
+                    let gRef = doc(db, "system", "logs");
+                    let gSnap = await getDoc(gRef);
+                    let gEntries = gSnap.exists() ? (gSnap.data().entries || []) : [];
+                    gEntries.unshift(entry);
+                    if (gEntries.length > 400) gEntries.length = 400;
+                    await setDoc(gRef, { entries: gEntries }, { merge: true });
+                } catch (e) {}
+            })();
         }
 
         async function loadSiteConfig() {
@@ -637,7 +632,7 @@
 
         window.deleteCustomSecRecord = async function(secId, recId) {
             if (!userData.customRecords?.[secId]) return;
-            userData.customRecords[secId] = userData.customRecords[secId].filter(r => r.id !== recId);
+            userData.customRecords[secId] = userData.customRecords[secId].filter(r => String(r.id) !== String(recId));
             await commitChange("Запись удалена", "error", true, `Удаление из «${secId}»`, String(recId));
         };
 
@@ -679,10 +674,11 @@
                 a.addEventListener('click', () => logAction("Переход в подраздел Перекупа", a.textContent.trim()));
             });
 
+            // Глобальное делегирование кликов по всем основным кнопкам (исключает зависание или потерю обработчиков)
             const clicks = {
                 'btn-login': () => authAction(false),
                 'btn-register': () => authAction(true),
-                'btn-logout': async () => { await logAction("Выход из аккаунта"); signOut(auth); },
+                'btn-logout': () => { logAction("Выход из аккаунта"); signOut(auth); },
                 'btn-start': startTheft,
                 'btn-finish': () => endTheft(false),
                 'btn-caught': () => endTheft(true),
@@ -707,7 +703,14 @@
                 'btn-admin-refresh-logs': loadGlobalRatings,
                 'btn-admin-clear-logs': adminClearSelectedUserLogs
             };
-            Object.entries(clicks).forEach(([id, fn]) => $(id)?.addEventListener('click', fn));
+
+            document.addEventListener('click', (e) => {
+                let btn = e.target.closest('button');
+                if (btn && btn.id && clicks[btn.id]) {
+                    e.preventDefault();
+                    clicks[btn.id]();
+                }
+            });
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -729,10 +732,10 @@
 
                     await loadUserData();
                     await loadSiteConfig();
-                    await loadGlobalRatings();
+                    loadGlobalRatings();
                     if (!subInterval) subInterval = setInterval(() => { updateSub(); updateTimers(); }, 1000);
                     updateSub();
-                    await logAction("Вход на сайт", `${userData.charName || currentLogin} (#${userData.staticId || '—'})`);
+                    logAction("Вход на сайт", `${userData.charName || currentLogin} (#${userData.staticId || '—'})`);
                     if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
                 } else {
                     currentUser = null; currentLogin = ""; isUserDataLoaded = false;
@@ -795,20 +798,15 @@
         function renderRatings(list) {
             let pLabel = formatPeriodLabel(ratingPeriod, ratingCustomDate);
 
-            if ($('th-theft-cnt')) $('th-theft-cnt').textContent = `Машин (${pLabel})`;
-            if ($('th-theft-earn')) $('th-theft-earn').textContent = `Заработано (${pLabel})`;
-            if ($('th-courier-cnt')) $('th-courier-cnt').textContent = `Закладок (${pLabel})`;
-            if ($('th-courier-earn')) $('th-courier-earn').textContent = `Заработано (${pLabel})`;
-            if ($('th-house-cnt')) $('th-house-cnt').textContent = `Ограблений (${pLabel})`;
-            if ($('th-house-earn')) $('th-house-earn').textContent = `Заработано (${pLabel})`;
-            if ($('th-reseller-rev')) $('th-reseller-rev').textContent = `Выручка (${pLabel})`;
-            if ($('th-reseller-prof')) $('th-reseller-prof').textContent = `Чистая прибыль (${pLabel})`;
-            if ($('th-casino-win')) $('th-casino-win').textContent = `Выиграно (${pLabel})`;
-            if ($('th-casino-lose')) $('th-casino-lose').textContent = `Проиграно (${pLabel})`;
-            if ($('th-casino-net')) $('th-casino-net').textContent = `Баланс (${pLabel})`;
-            if ($('th-debts-owe')) $('th-debts-owe').textContent = `Должен (${pLabel})`;
-            if ($('th-debts-oweme')) $('th-debts-oweme').textContent = `Должны ему (${pLabel})`;
-            if ($('th-debts-net')) $('th-debts-net').textContent = `Баланс (${pLabel})`;
+            const headersMap = {
+                'th-theft-cnt': `Машин (${pLabel})`, 'th-theft-earn': `Заработано (${pLabel})`,
+                'th-courier-cnt': `Закладок (${pLabel})`, 'th-courier-earn': `Заработано (${pLabel})`,
+                'th-house-cnt': `Ограблений (${pLabel})`, 'th-house-earn': `Заработано (${pLabel})`,
+                'th-reseller-rev': `Выручка (${pLabel})`, 'th-reseller-prof': `Чистая прибыль (${pLabel})`,
+                'th-casino-win': `Выиграно (${pLabel})`, 'th-casino-lose': `Проиграно (${pLabel})`, 'th-casino-net': `Баланс (${pLabel})`,
+                'th-debts-owe': `Должен (${pLabel})`, 'th-debts-oweme': `Должны ему (${pLabel})`, 'th-debts-net': `Баланс (${pLabel})`
+            };
+            Object.entries(headersMap).forEach(([id, text]) => { if ($(id)) $(id).textContent = text; });
 
             document.querySelectorAll('.dyn-period-col-cnt').forEach(el => el.textContent = `Кол-во (${pLabel})`);
             document.querySelectorAll('.dyn-period-col-earn').forEach(el => el.textContent = `Заработано (${pLabel})`);
@@ -927,22 +925,17 @@
             });
         }
 
-        // ==================== АДМИН-РЕДАКТОР ПОДПИСОК, ПРОФИЛЕЙ И ЛОГОВ ====================
+        // ==================== АДМИН-РЕДАКТОР ====================
         function getRemainingDiffForLogin(login) {
             if (login === ADMIN_LOGIN) return 9999999999999;
             let exp = allowedUsersMapCache[login];
-            if (!exp) return -9999999999999;
-            return exp - Date.now();
+            return exp ? exp - Date.now() : -9999999999999;
         }
 
         function renderAllowedUsersList() {
             let arr = Object.keys(allowedUsersMapCache).map(login => {
                 let uObj = allUsersCache.find(u => u.login === login);
-                return {
-                    login,
-                    diff: allowedUsersMapCache[login] - Date.now(),
-                    bracketInfo: formatBracketProfile(uObj)
-                };
+                return { login, diff: allowedUsersMapCache[login] - Date.now(), bracketInfo: formatBracketProfile(uObj) };
             }).sort((a, b) => b.diff - a.diff);
 
             renderList('allowed-list', arr, "Список подписок пуст", 3, i => `
@@ -966,7 +959,7 @@
                 let subStatusHtml = isAdm
                     ? `<span style="color:var(--accent);font-weight:bold;">Безлимит (Админ)</span>`
                     : `<span style="color:${u.diff > 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;display:block;font-size:0.8rem;margin-bottom:4px;">${u.diff > 0 ? formatTime(u.diff) : 'Нет / Истекла'}</span>
-                       <input type="number" class="inline-input" id="adm-prof-days-${idx}" value="${u.remDays}" step="0.5" min="0" placeholder="Дней" title="Изменить кол-во дней подписки">`;
+                       <input type="number" class="inline-input" id="adm-prof-days-${idx}" value="${u.remDays}" step="0.5" min="0" placeholder="Дней">`;
 
                 return `
                     <tr>
@@ -978,8 +971,8 @@
                         <td><input type="text" class="inline-input" id="adm-prof-static-${idx}" value="${u.staticId || ''}" placeholder="Статик"></td>
                         <td>${subStatusHtml}</td>
                         <td style="text-align:right;white-space:nowrap;">
-                            <button type="button" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0;" onclick="adminSaveUserProfile('${u.uid}', '${u.login}', ${idx})" title="Сохранить изменения">💾</button>
-                            ${!isAdm ? `<button type="button" class="danger" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0 0 0 6px;" onclick="adminDeleteUserProfile('${u.uid}', '${u.login}')" title="Полностью удалить профиль и подписку">🗑</button>` : ''}
+                            <button type="button" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0;" onclick="adminSaveUserProfile('${u.uid}', '${u.login}', ${idx})">💾</button>
+                            ${!isAdm ? `<button type="button" class="danger" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0 0 0 6px;" onclick="adminDeleteUserProfile('${u.uid}', '${u.login}')">🗑</button>` : ''}
                         </td>
                     </tr>
                 `;
@@ -993,19 +986,15 @@
             let daysInput = $(`adm-prof-days-${idx}`);
 
             if (!newLogin) return showToast("Логин не может быть пустым!", "error");
-
             try {
                 await setDoc(doc(db, "users", uid), { login: newLogin, charName, staticId }, { merge: true });
-
                 if (oldLogin !== ADMIN_LOGIN) {
                     let ref = doc(db, "system", "config"), snap = await getDoc(ref);
                     let map = snap.exists() ? { ...(snap.data().allowedUsersMap || {}) } : {};
-
                     if (newLogin !== oldLogin) {
                         if (map[oldLogin] && !map[newLogin]) map[newLogin] = map[oldLogin];
                         delete map[oldLogin];
                     }
-
                     if (daysInput) {
                         let dVal = parseFloat(daysInput.value);
                         if (!isNaN(dVal)) {
@@ -1015,14 +1004,13 @@
                     }
                     await setDoc(ref, { allowedUsersMap: map }, { merge: true });
                 }
-
                 if (currentUser && currentUser.uid === uid) {
                     userData.charName = charName;
                     userData.staticId = staticId;
                     renderState();
                 }
                 await loadGlobalRatings();
-                showToast(`Данные пользователя «${newLogin}» успешно сохранены!`);
+                showToast(`Данные пользователя «${newLogin}» сохранены!`);
             } catch (e) { showToast("Ошибка: " + e.message, "error"); }
         };
 
@@ -1057,11 +1045,10 @@
             $('adm-ph-login').value = L.authLoginPlaceholder || "";
             $('adm-ph-pass').value = L.authPassPlaceholder || "";
 
-            const bindCtrl = (key) => {
+            ['tabPerekup', 'tabFarm', 'tabCasino', 'tabDebts', 'tabRating', 'subCabinet', 'subProperty', 'subLedger', 'subAnalytics', 'subTheft', 'subCourier', 'subHouse'].forEach(key => {
                 if ($(`adm-lbl-${key}`)) $(`adm-lbl-${key}`).value = L[key] || "";
                 if ($(`adm-vis-${key}`)) $(`adm-vis-${key}`).checked = V[key] !== false;
-            };
-            ['tabPerekup', 'tabFarm', 'tabCasino', 'tabDebts', 'tabRating', 'subCabinet', 'subProperty', 'subLedger', 'subAnalytics', 'subTheft', 'subCourier', 'subHouse'].forEach(bindCtrl);
+            });
 
             ['btnAddReseller', 'btnStartTheft', 'btnFinishTheft', 'btnCaughtTheft', 'btnAddCourier', 'btnAddHouse', 'btnAddDice', 'btnAddDebt'].forEach(k => {
                 if ($(`adm-${k}`)) $(`adm-${k}`).value = L[k] || "";
@@ -1319,9 +1306,7 @@
                 let l = u.login;
                 if (!l || (selectedUser !== 'all' && l !== selectedUser)) return;
 
-                (u.activityLogs || []).forEach(entry => {
-                    pushUnique(l, entry.id, entry.date, entry.time, entry.action, entry.details);
-                });
+                (u.activityLogs || []).forEach(entry => pushUnique(l, entry.id, entry.date, entry.time, entry.action, entry.details));
 
                 if (u.activeTheft) {
                     let stDate = new Date(u.activeTheft.startTime);
@@ -1489,7 +1474,7 @@
             logAction("Переключен ввод своей цены (Угон)", cb.checked ? "Включен" : "Выключен");
         };
 
-        const getCurrentLevelObj = () => siteConfig.theftLevels[$('level-select').value] || { mode: 'custom', cars: [] };
+        const getCurrentLevelObj = () => siteConfig.theftLevels[$('level-select')?.value] || siteConfig.theftLevels["7"] || { mode: 'custom', cars: [] };
 
         function getActiveBonusPercent() {
             let lvl = getCurrentLevelObj();
@@ -1515,7 +1500,10 @@
             updateCarInfo();
         }
 
-        const getSelectedCar = () => (getCurrentLevelObj().cars || []).find(c => c.name === $('car-select').value);
+        const getSelectedCar = () => {
+            let cars = getCurrentLevelObj().cars || [];
+            return cars.find(c => c.name === $('car-select')?.value) || cars[0];
+        };
 
         function updateCarInfo() {
             let info = $('selected-car-info'), lvl = getCurrentLevelObj();
@@ -1594,18 +1582,24 @@
             await setDoc(doc(db, "users", currentUser.uid), userData, { merge: true });
         }
 
+        // Мгновенный отклик интерфейса (Optimistic UI) без зависаний на медленном интернете
         async function commitChange(msg, type = 'success', refreshRatings = true, logTitle = "", logDetails = "") {
-            if (logTitle) await logAction(logTitle, logDetails);
-            await saveUserData();
+            if (logTitle) logAction(logTitle, logDetails, true);
             renderState();
-            if (refreshRatings) await loadGlobalRatings();
             if (msg) showToast(msg, type);
+            try {
+                await saveUserData();
+                if (refreshRatings) loadGlobalRatings();
+            } catch (err) {
+                console.error(err);
+                showToast("Ошибка синхронизации с облаком: " + err.message, "error");
+            }
         }
 
         window.deleteRecord = async function(collectionKey, id, isIndex = false) {
-            let item = isIndex ? userData[collectionKey][id] : userData[collectionKey].find(x => x.id === id);
+            let item = isIndex ? userData[collectionKey][id] : userData[collectionKey].find(x => String(x.id) === String(id));
             if (isIndex) userData[collectionKey].splice(id, 1);
-            else userData[collectionKey] = userData[collectionKey].filter(x => x.id !== id);
+            else userData[collectionKey] = userData[collectionKey].filter(x => String(x.id) !== String(id));
             await commitChange("Запись удалена", "error", true, `Удаление из ${collectionKey}`, item?.name || item?.person || fmt(item?.amount || item?.price || item?.earned));
         };
 
@@ -1617,11 +1611,13 @@
         }
 
         function openFinishHouseBox() {
-            $('house-finish-inputs').style.display = 'block';
+            let box = $('house-finish-inputs');
+            if (!box) return;
+            box.style.display = 'block';
             if (siteConfig.defaults.houseAmount > 0 && !$('house-amount').value) {
                 $('house-amount').value = fmt(siteConfig.defaults.houseAmount);
             }
-            $('house-amount').focus();
+            $('house-amount')?.focus();
         }
 
         async function finishHouse() {
@@ -1629,7 +1625,7 @@
             let amount = getCleanNumber('house-amount');
             if (amount <= 0) return showToast("Введите корректную сумму ограбления!", "error");
 
-            let sec = Math.floor((Date.now() - userData.activeHouse.startTime) / 1000);
+            let sec = Math.max(0, Math.floor((Date.now() - (userData.activeHouse.startTime || Date.now())) / 1000));
             let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
             let { shortTime: time, date } = getMskNow();
 
@@ -1655,11 +1651,13 @@
         }
 
         function openFinishCourierBox() {
-            $('courier-finish-inputs').style.display = 'block';
+            let box = $('courier-finish-inputs');
+            if (!box) return;
+            box.style.display = 'block';
             if (siteConfig.defaults.courierPrice > 0 && !$('courier-price').value) {
                 $('courier-price').value = fmt(siteConfig.defaults.courierPrice);
             }
-            $('courier-count').focus();
+            $('courier-count')?.focus();
         }
 
         async function finishCourier() {
@@ -1668,7 +1666,7 @@
             let pricePerOne = getCleanNumber('courier-price');
             if (count <= 0 || pricePerOne <= 0) return showToast("Введите количество развезённых закладок и цену за 1 шт.!", "error");
 
-            let sec = Math.floor((Date.now() - userData.activeCourier.startTime) / 1000);
+            let sec = Math.max(0, Math.floor((Date.now() - (userData.activeCourier.startTime || Date.now())) / 1000));
             let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
             let earned = count * pricePerOne;
             let { shortTime: time, date } = getMskNow();
@@ -1686,8 +1684,8 @@
             $('courier-finish-inputs').style.display = 'none';
             await commitChange("Развоз закладок отменен", "error", false, "Отмена развоза закладок", "0 ₽");
         }
-        // ====================================================================
 
+        // ==================== ПЕРЕКУП (ПРОДАЖА БЕЗ БЛОКИРУЮЩЕГО PROMPT) ====================
         async function addResellerItem() {
             let name = $('res-name').value.trim(), buyPrice = getCleanNumber('res-buy');
             let isRedemption = $('res-redemption').checked, owner = $('res-owner').value.trim();
@@ -1700,18 +1698,42 @@
 
         window.toggleRedemptionBox = (cb) => { $('res-owner-box').style.display = cb.checked ? 'block' : 'none'; };
 
-        window.sellResellerItem = async function(id) {
-            let item = userData.resellerItems.find(i => i.id === id);
-            if (!item) return;
-            let pr = prompt(`За сколько вы продали "${item.name}"?`, item.buyPrice);
-            if (pr === null) return;
-            let sellPrice = parseFloat(pr.replace(/\s/g, ''));
-            if (isNaN(sellPrice)) return showToast("Некорректная сумма!", "error");
+        // Открытие встроенного поля продажи прямо в строке таблицы
+        window.openSellResellerItem = function(id) {
+            sellingItemId = String(id);
+            renderState();
+            setTimeout(() => {
+                let inp = document.querySelector(`.sell-price-input-${sellingItemId}`);
+                if (inp) { inp.focus(); inp.select(); }
+            }, 30);
+        };
 
-            item.sellPrice = sellPrice; item.status = "sold"; item.soldTime = Date.now();
-            let profit = sellPrice - item.buyPrice;
+        window.cancelSellResellerItem = function() {
+            sellingItemId = null;
+            renderState();
+        };
+
+        window.confirmSellResellerItem = async function(id, btnEl) {
+            let item = (userData.resellerItems || []).find(i => String(i.id) === String(id));
+            if (!item) return showToast("Лот не найден!", "error");
+
+            let row = btnEl ? btnEl.closest('td') : null;
+            let inp = row ? row.querySelector('input') : document.querySelector(`.sell-price-input-${id}`);
+            let sellPrice = cleanNumStr(inp?.value);
+
+            if (!inp || inp.value.trim() === '' || isNaN(sellPrice) || sellPrice < 0) {
+                return showToast("Введите корректную цену продажи!", "error");
+            }
+
+            item.sellPrice = sellPrice;
+            item.status = "sold";
+            item.soldTime = Date.now();
+            sellingItemId = null;
+
+            let profit = sellPrice - (Number(item.buyPrice) || 0);
             await commitChange(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error", true, "Продажа вещи (Перекуп)", `${item.name}: продано за ${fmt(sellPrice)} ₽ (прибыль ${fmt(profit)} ₽)`);
         };
+        // ====================================================================
 
         async function addDebtRecord() {
             let person = $('debt-person').value.trim(), amount = getCleanNumber('debt-amount'), type = $('debt-type').value;
@@ -1738,7 +1760,7 @@
         }
 
         async function startTheft() {
-            let level = $('level-select').value, lvlObj = getCurrentLevelObj();
+            let level = $('level-select')?.value || "7", lvlObj = getCurrentLevelObj();
             if (lvlObj.mode === 'custom') {
                 let customPrice = getCleanNumber('custom-theft-price');
                 if (customPrice <= 0) return showToast("Введите стоимость за авто!", "error");
@@ -1746,7 +1768,7 @@
                 $('custom-theft-price').value = siteConfig.defaults.lowLevelTheftPrice > 0 ? fmt(siteConfig.defaults.lowLevelTheftPrice) : "";
             } else {
                 let car = getSelectedCar();
-                if (!car) return;
+                if (!car) return showToast("Выберите автомобиль из списка!", "error");
                 if ($('custom-price-check')?.checked) {
                     let customPrice = getCleanNumber('custom-theft-price');
                     if (customPrice <= 0) return showToast("Введите свою сумму оплаты за авто!", "error");
@@ -1760,11 +1782,17 @@
         }
 
         async function endTheft(caught = false) {
-            if (!userData.activeTheft) return;
-            let sec = Math.floor((Date.now() - userData.activeTheft.startTime) / 1000);
-            let { carName: name, level, customPrice, bonusPercent } = userData.activeTheft;
-            let bonusPct = bonusPercent || 0, duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
+            if (!userData.activeTheft) return showToast("Нет активного угона!", "error");
+            let startMs = Number(userData.activeTheft.startTime) || Date.now();
+            let sec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+            let name = userData.activeTheft.carName || "Авто";
+            let level = userData.activeTheft.level || "7";
+            let customPrice = Number(userData.activeTheft.customPrice) || 0;
+            let bonusPct = Number(userData.activeTheft.bonusPercent) || 0;
+            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
             let { shortTime: time, date } = getMskNow();
+
+            if (!Array.isArray(userData.history)) userData.history = [];
 
             if (caught) {
                 userData.history.unshift({ id: Date.now(), name, level, duration, price: 0, status: 'caught', time, date });
@@ -1772,32 +1800,28 @@
                 return commitChange("Поймали менты (0 ₽)", "error", false, "Провал угона (полиция)", `${name} (${duration})`);
             }
 
-            let lvlCars = siteConfig.theftLevels[level]?.cars || [];
-            let price = customPrice
-                ? customPrice
-                : Math.round(((lvlCars.find(c => c.name === name)?.[isNight() ? 'night' : 'day']) || 0) * (1 + bonusPct / 100));
+            let lvlCars = siteConfig.theftLevels?.[level]?.cars || defaultSiteConfig.theftLevels["7"].cars;
+            let foundCar = lvlCars.find(c => c.name === name) || defaultSiteConfig.theftLevels["7"].cars.find(c => c.name === name);
+            let baseCarPrice = foundCar ? (isNight() ? Number(foundCar.night) : Number(foundCar.day)) : 0;
 
-            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice && siteConfig.theftLevels[level]?.mode === 'list' ? `${name} (своя цена)` : name);
+            let price = customPrice > 0 ? customPrice : Math.round(baseCarPrice * (1 + bonusPct / 100));
+            let isListMode = siteConfig.theftLevels?.[level]?.mode !== 'custom';
+            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice > 0 && isListMode ? `${name} (своя цена)` : name);
+
             userData.history.unshift({ id: Date.now(), name: displayCarName, level, duration, price, status: 'success', time, date });
             userData.activeTheft = null;
             await commitChange(`Авто сдано! +${fmt(price)} ₽`, "success", true, "Успешная сдача угона", `${displayCarName}: +${fmt(price)} ₽ (${duration})`);
         }
 
         const fmtTimerClock = (startTime) => {
-            let sec = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+            let sec = Math.max(0, Math.floor((Date.now() - (Number(startTime) || Date.now())) / 1000));
             return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
         };
 
         function updateTimers() {
-            if (userData.activeTheft && $('active-timer')) {
-                $('active-timer').textContent = fmtTimerClock(userData.activeTheft.startTime);
-            }
-            if (userData.activeCourier && $('active-courier-timer')) {
-                $('active-courier-timer').textContent = fmtTimerClock(userData.activeCourier.startTime);
-            }
-            if (userData.activeHouse && $('active-house-timer')) {
-                $('active-house-timer').textContent = fmtTimerClock(userData.activeHouse.startTime);
-            }
+            if (userData.activeTheft && $('active-timer')) $('active-timer').textContent = fmtTimerClock(userData.activeTheft.startTime);
+            if (userData.activeCourier && $('active-courier-timer')) $('active-courier-timer').textContent = fmtTimerClock(userData.activeCourier.startTime);
+            if (userData.activeHouse && $('active-house-timer')) $('active-house-timer').textContent = fmtTimerClock(userData.activeHouse.startTime);
             document.querySelectorAll('.res-timer').forEach(el => {
                 let st = parseInt(el.dataset.start);
                 if (st) el.textContent = formatTime(Date.now() - st);
@@ -1819,7 +1843,6 @@
             let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : displayLogin;
             if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${displayLogin}]</small>`;
 
-            // Панель активного угона
             if (userData.activeTheft) {
                 $('active-panel').style.display = 'block';
                 $('start-panel').style.display = 'none';
@@ -1831,7 +1854,6 @@
                 $('start-panel').style.display = 'block';
             }
 
-            // Панель активного развоза закладок
             if (userData.activeCourier) {
                 $('active-courier-panel').style.display = 'block';
                 $('start-courier-panel').style.display = 'none';
@@ -1840,7 +1862,6 @@
                 $('start-courier-panel').style.display = 'block';
             }
 
-            // Панель активного ограбления дома
             if (userData.activeHouse) {
                 $('active-house-panel').style.display = 'block';
                 $('start-house-panel').style.display = 'none';
@@ -1850,7 +1871,6 @@
             }
             updateTimers();
 
-            // ==================== ОБЩАЯ ВЫРУЧКА СО ВСЕГО ФАРМА ЗА ВЫБРАННЫЙ ПЕРИОД ====================
             let fLabel = formatPeriodLabel(farmPeriod, farmCustomDate);
             if ($('farm-total-period-label')) $('farm-total-period-label').textContent = `Общая выручка со всего фарма (${fLabel})`;
 
@@ -1862,12 +1882,11 @@
             let fCourierSum = sumBy(fCourierList, c => c.earned);
             let fHouseSum = sumBy(fHouseList, h => h.amount);
 
-            let fCustomSum = 0, fCustomTasks = 0;
+            let fCustomSum = 0;
             (siteConfig.customSections || []).forEach(sec => {
                 if (sec.placement === 'farm' && sec.enabled !== false) {
                     let recs = (userData.customRecords?.[sec.id] || []).filter(r => isRecordInFarmPeriod(r.date, r.id));
                     fCustomSum += sumBy(recs, r => r.amount);
-                    fCustomTasks += sumBy(recs, r => r.count || 1);
                 }
             });
 
@@ -1879,7 +1898,6 @@
                 $('farm-total-breakdown').innerHTML = `🚗 Угон: <b>${fmt(fTheftSum)} ₽</b> (${fTheftList.length} авто) &nbsp;|&nbsp; 📦 Закладки: <b>${fmt(fCourierSum)} ₽</b> (${fCourierCount} шт.) &nbsp;|&nbsp; 🏠 Дома: <b>${fmt(fHouseSum)} ₽</b> (${fHouseList.length} дом.)${fCustomSum > 0 ? ` &nbsp;|&nbsp; Доп: <b>${fmt(fCustomSum)} ₽</b>` : ''}`;
             }
 
-            // Показатели внутри подразделов за сегодня
             let today = getMskNow().date;
             let todayH = (userData.history || []).filter(h => (h.date || today) === today && h.status !== 'caught');
             $('today-count').textContent = todayH.length;
@@ -1898,8 +1916,8 @@
                     let daySucc = grouped[day].filter(g => g.item.status !== 'caught');
                     let rows = `<tr class="day-header"><td colspan="5">📅 ${day} | Успешных: ${daySucc.length} | Заработано: ${fmt(sumBy(daySucc, g => g.item.price))} ₽</td></tr>`;
                     return rows + grouped[day].map(({ item: i, globalIndex: idx }) => {
-                        let title = i.name.includes('ур.') ? i.name : `${i.name} (${i.level} ур.)`;
-                        return `<tr class="${i.status === 'caught' ? 'caught-row' : ''}"><td>${title}</td><td>${i.time}</td><td>${i.duration}</td><td>${i.status === 'caught' ? 'Поймали менты (0 ₽)' : fmt(i.price) + ' ₽'}</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('history', ${idx}, true)">✕</button></td></tr>`;
+                        let title = (i.name || '').includes('ур.') ? i.name : `${i.name} (${i.level} ур.)`;
+                        return `<tr class="${i.status === 'caught' ? 'caught-row' : ''}"><td>${title}</td><td>${i.time}</td><td>${i.duration}</td><td>${i.status === 'caught' ? 'Поймали менты (0 ₽)' : fmt(i.price) + ' ₽'}</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('history', ${idx}, true)">✕</button></td></tr>`;
                     }).join('');
                 }).join('');
             }
@@ -1914,33 +1932,47 @@
             $('res-analyst-revenue').textContent = fmt(sumBy(sold, i => i.sellPrice)) + ' ₽';
 
             const fDate = (ts) => ts ? new Date(ts).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '--';
-            const resActions = (id) => `<td style="text-align:right;"><button style="padding:6px 10px;font-size:0.8rem;width:auto;margin-top:0;" onclick="sellResellerItem(${id})">Продать</button><button class="delete-btn" onclick="deleteRecord('resellerItems', ${id})">✕</button></td>`;
+            const resActions = (item) => {
+                if (String(sellingItemId) === String(item.id)) {
+                    return `<td style="text-align:right;">
+                        <div class="sell-inline-box">
+                            <input type="text" class="sell-price-input-${item.id}" value="${fmt(item.buyPrice)}" placeholder="Цена продажи" oninput="formatMoneyInput(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmSellResellerItem('${item.id}', this);}">
+                            <button type="button" onclick="confirmSellResellerItem('${item.id}', this)" title="Подтвердить продажу">✅ ОК</button>
+                            <button type="button" class="secondary" onclick="cancelSellResellerItem()" title="Отмена">✕</button>
+                        </div>
+                    </td>`;
+                }
+                return `<td style="text-align:right;white-space:nowrap;">
+                    <button type="button" style="padding:6px 12px;font-size:0.82rem;width:auto;margin-top:0;" onclick="openSellResellerItem('${item.id}')">Продать</button>
+                    <button type="button" class="delete-btn" onclick="deleteRecord('resellerItems', '${item.id}')">✕</button>
+                </td>`;
+            };
 
             renderList('res-cabinet-active-list', active, "Активных лотов нет", 4, i => `
-                <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">Куплено: ${fDate(i.startTime || i.id)}</small>${i.isRedemption ? `<br><small style="color:var(--accent);">Выкуп от: ${i.owner}</small>` : ""}</td><td>${fmt(i.buyPrice)} ₽</td><td>Активен</td>${resActions(i.id)}</tr>
+                <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">Куплено: ${fDate(i.startTime || i.id)}</small>${i.isRedemption ? `<br><small style="color:var(--accent);">Выкуп от: ${i.owner}</small>` : ""}</td><td>${fmt(i.buyPrice)} ₽</td><td>Активен</td>${resActions(i)}</tr>
             `);
 
             renderList('reseller-property-list', active, "Имущество не найдено", 5, i => `
-                <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>⏳ <span class="res-timer" data-start="${i.startTime}">${formatTime(Date.now() - i.startTime)}</span></td><td>Активен</td>${resActions(i.id)}</tr>
+                <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>⏳ <span class="res-timer" data-start="${i.startTime}">${formatTime(Date.now() - i.startTime)}</span></td><td>Активен</td>${resActions(i)}</tr>
             `);
 
             renderList('reseller-ledger-list', items, "Тетрадь пуста", 4, i => {
                 let isS = i.status === 'sold', p = isS ? (i.sellPrice - i.buyPrice) : 0;
-                return `<tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>${isS ? `<span style="color:${p >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">Продано за ${fmt(i.sellPrice)} ₽ (Прибыль: ${fmt(p)} ₽)</span>` : `<span style="color:var(--accent);">В продаже</span>`}</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('resellerItems', ${i.id})">✕</button></td></tr>`;
+                return `<tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>${isS ? `<span style="color:${p >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">Продано за ${fmt(i.sellPrice)} ₽ (Прибыль: ${fmt(p)} ₽)</span>` : `<span style="color:var(--accent);">В продаже</span>`}</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('resellerItems', '${i.id}')">✕</button></td></tr>`;
             });
 
             let cList = userData.courierHistory || [], todayC = cList.filter(c => (c.date || today) === today);
             $('courier-today-count').textContent = sumBy(todayC, c => c.count);
             $('courier-today-earned').textContent = fmt(sumBy(todayC, c => c.earned)) + ' ₽';
             renderList('courier-history-list', cList, "История закладок пуста", 6, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.earned)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('courierHistory', ${i.id})">✕</button></td></tr>
+                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.earned)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('courierHistory', '${i.id}')">✕</button></td></tr>
             `);
 
             let hList = userData.houseHistory || [], todayHList = hList.filter(h => (h.date || today) === today);
             $('house-today-count').textContent = todayHList.length;
             $('house-today-earned').textContent = fmt(sumBy(todayHList, h => h.amount)) + ' ₽';
             renderList('house-history-list', hList, "История ограблений пуста", 4, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.amount)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('houseHistory', ${i.id})">✕</button></td></tr>
+                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.amount)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('houseHistory', '${i.id}')">✕</button></td></tr>
             `);
 
             let dice = userData.diceHistory || [];
@@ -1948,14 +1980,14 @@
             $('dice-stat-wins').textContent = fmt(dw) + ' ₽'; $('dice-stat-losses').textContent = fmt(dl) + ' ₽';
             setSignedVal('dice-stat-net', dw - dl);
             renderList('dice-history-list', dice, "История костей пуста", 4, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${fmt(i.amount)} ₽</td><td><span style="color:${i.result === 'win' ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${i.result === 'win' ? `Победа (+${fmt(i.amount)} ₽)` : `Проигрыш (-${fmt(i.amount)} ₽)`}</span></td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('diceHistory', ${i.id})">✕</button></td></tr>
+                <tr><td>${i.date} ${i.time}</td><td>${fmt(i.amount)} ₽</td><td><span style="color:${i.result === 'win' ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${i.result === 'win' ? `Победа (+${fmt(i.amount)} ₽)` : `Проигрыш (-${fmt(i.amount)} ₽)`}</span></td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('diceHistory', '${i.id}')">✕</button></td></tr>
             `);
 
             let debts = userData.debts || [];
             $('debt-stat-i-owe').textContent = fmt(sumBy(debts.filter(d => d.type === 'i_owe'), d => d.amount)) + ' ₽';
             $('debt-stat-owes-me').textContent = fmt(sumBy(debts.filter(d => d.type === 'owes_me'), d => d.amount)) + ' ₽';
             renderList('debts-history-list', debts, "Список долгов пуст", 5, d => `
-                <tr><td>${d.date} ${d.time}</td><td><strong>${d.person}</strong></td><td style="font-weight:bold;">${fmt(d.amount)} ₽</td><td><span style="color:${d.type === 'i_owe' ? 'var(--danger)' : 'var(--success)'};font-weight:bold;">${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'}</span></td><td style="text-align:right;"><button class="delete-btn" onclick="deleteRecord('debts', ${d.id})">✕</button></td></tr>
+                <tr><td>${d.date} ${d.time}</td><td><strong>${d.person}</strong></td><td style="font-weight:bold;">${fmt(d.amount)} ₽</td><td><span style="color:${d.type === 'i_owe' ? 'var(--danger)' : 'var(--success)'};font-weight:bold;">${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'}</span></td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('debts', '${d.id}')">✕</button></td></tr>
             `);
 
             (siteConfig.customSections || []).forEach(sec => {
@@ -1964,7 +1996,7 @@
                 if ($(`dyn-stat-cnt-${sec.id}`)) $(`dyn-stat-cnt-${sec.id}`).textContent = sumBy(todayRecs, r => r.count || 1);
                 if ($(`dyn-stat-earn-${sec.id}`)) $(`dyn-stat-earn-${sec.id}`).textContent = fmt(sumBy(todayRecs, r => r.amount)) + ' ₽';
                 renderList(`dyn-hist-${sec.id}`, recs, "Записей пока нет", 4, r => `
-                    <tr><td>${r.date} ${r.time}</td><td>${r.details}</td><td style="color:var(--success);font-weight:bold;">+${fmt(r.amount)} ₽</td><td style="text-align:right;"><button class="delete-btn" onclick="deleteCustomSecRecord('${sec.id}', ${r.id})">✕</button></td></tr>
+                    <tr><td>${r.date} ${r.time}</td><td>${r.details}</td><td style="color:var(--success);font-weight:bold;">+${fmt(r.amount)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteCustomSecRecord('${sec.id}', '${r.id}')">✕</button></td></tr>
                 `);
             });
         }
@@ -1989,15 +2021,15 @@
         <input type="text" id="auth-login" placeholder="Логин">
         <input type="password" id="auth-pass" placeholder="Пароль">
 
-        <button id="btn-login" style="margin-top:16px;">Войти в аккаунт</button>
-        <button id="btn-register" style="display:none; margin-top:16px;">Зарегистрироваться</button>
+        <button type="button" id="btn-login" style="margin-top:16px;">Войти в аккаунт</button>
+        <button type="button" id="btn-register" style="display:none; margin-top:16px;">Зарегистрироваться</button>
     </div>
 
     <div id="app-section" style="display:none;">
         <div class="user-bar">
             <div>Персонаж: <strong id="user-login"></strong></div>
             <div>Подписка: <span id="sub-countdown" style="color: var(--success); font-weight: bold;">--</span></div>
-            <button id="btn-logout" class="danger" style="width: auto; padding: 6px 14px; margin: 0;">Выйти</button>
+            <button type="button" id="btn-logout" class="danger" style="width: auto; padding: 6px 14px; margin: 0;">Выйти</button>
         </div>
 
         <div class="nav-tabs" id="main-nav-tabs">
@@ -2027,7 +2059,7 @@
                     <input type="text" id="new-allowed-login" placeholder="Логин пользователя (по нему игрок сможет зарегистрироваться)">
                     <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок (в днях):</label>
                     <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
-                    <button id="btn-add-allowed">Выдать / продлить доступ</button>
+                    <button type="button" id="btn-add-allowed">Выдать / продлить доступ</button>
                     <h3 style="margin-top: 20px; font-size: 1rem;">Список подписок (сверху больше всего дней, снизу истекшие):</h3>
                     <table>
                         <thead><tr><th>Логин (Имя Фамилия #Статик)</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
@@ -2200,7 +2232,7 @@
                 </div>
             </div>
 
-            <!-- Админ 4: Компактные логи действий пользователей с сортировкой и пагинацией -->
+            <!-- Админ 4: Логи действий пользователей -->
             <div id="admin-sub-logs" class="admin-content">
                 <div class="card admin-card">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:15px;">
@@ -2287,12 +2319,12 @@
                     <input type="text" id="res-buy" placeholder="Цена покупки (₽)" oninput="formatMoneyInput(this)">
                     <div style="margin-top: 15px;"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;"><input type="checkbox" id="res-redemption" style="width: auto; margin: 0;" onchange="toggleRedemptionBox(this)"><span>Взято под выкуп (чужая вещь)</span></label></div>
                     <div id="res-owner-box" style="display: none; margin-top: 10px;"><input type="text" id="res-owner" placeholder="Имя/Логин владельца"></div>
-                    <button id="btn-add-reseller-item" style="margin-top: 15px;">Добавить в учет</button>
+                    <button type="button" id="btn-add-reseller-item" style="margin-top: 15px;">Добавить в учет</button>
                 </div>
                 <div class="card">
                     <h2>Активные лоты</h2>
                     <table>
-                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Статус</th><th style="width: 140px;"></th></tr></thead>
+                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Статус</th><th style="width: 240px; text-align:right;">Действие</th></tr></thead>
                         <tbody id="res-cabinet-active-list"><tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Нет лотов</td></tr></tbody>
                     </table>
                 </div>
@@ -2301,7 +2333,7 @@
                 <div class="card">
                     <h2>Имущество и карточки</h2>
                     <table>
-                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Время</th><th>Статус</th><th style="width: 140px;"></th></tr></thead>
+                        <thead><tr><th>Вещь / Дата</th><th>Покупка</th><th>Время</th><th>Статус</th><th style="width: 240px; text-align:right;">Действие</th></tr></thead>
                         <tbody id="reseller-property-list"><tr><td colspan="5" style="text-align: center;">Пусто</td></tr></tbody>
                     </table>
                 </div>
@@ -2325,7 +2357,6 @@
 
         <!-- Раздел Фарм -->
         <div id="tab-farm" class="tab-content">
-            <!-- Общая сводка заработка со всего фарма за выбранный период -->
             <div class="rating-filter-bar">
                 <div class="sub-tabs-links">
                     <button type="button" class="sub-btn farm-period-btn active" data-period="today" onclick="setFarmPeriod('today')">📅 За сегодня</button>
@@ -2363,8 +2394,8 @@
                     <p>Автомобиль: <strong id="active-car-name"></strong></p>
                     <div id="active-timer" class="timer-display">00:00</div>
                     <div class="button-group">
-                        <button id="btn-finish" style="flex:1;">Закончить сдачу</button>
-                        <button id="btn-caught" class="danger" style="flex:1;">Поймали менты</button>
+                        <button type="button" id="btn-finish" style="flex:1;">Закончить сдачу</button>
+                        <button type="button" id="btn-caught" class="danger" style="flex:1;">Поймали менты</button>
                     </div>
                 </div>
                 <div class="card" id="start-panel">
@@ -2400,7 +2431,7 @@
                     </div>
 
                     <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
-                    <button id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
+                    <button type="button" id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
                 </div>
                 <div class="card">
                     <h2>История угонов</h2>
@@ -2411,7 +2442,7 @@
                 </div>
             </div>
 
-            <!-- Подраздел: Закладчик (С таймером развоза) -->
+            <!-- Подраздел: Закладчик -->
             <div id="farm-sub-courier" class="farm-content">
                 <div class="stats-grid">
                     <div class="stat-card"><div>Закладок за сегодня</div><div id="courier-today-count" class="stat-value">0</div></div>
@@ -2451,7 +2482,7 @@
                 </div>
             </div>
 
-            <!-- Подраздел: Ограбление домов (С таймером ограбления) -->
+            <!-- Подраздел: Ограбление домов -->
             <div id="farm-sub-house" class="farm-content">
                 <div class="stats-grid">
                     <div class="stat-card"><div>Домов за сегодня</div><div id="house-today-count" class="stat-value">0</div></div>
@@ -2502,7 +2533,7 @@
                 <h2>🎲 Записать игру в кости</h2>
                 <label>Результат игры:</label><select id="dice-result"><option value="win">Победа (Выигрыш)</option><option value="lose">Проигрыш</option></select>
                 <label style="margin-top: 15px; display: block;">Сумма ставки (₽):</label><input type="text" id="dice-amount" placeholder="500 000" oninput="formatMoneyInput(this)">
-                <button id="btn-add-dice" style="margin-top: 15px;">Записать в историю</button>
+                <button type="button" id="btn-add-dice" style="margin-top: 15px;">Записать в историю</button>
             </div>
             <div class="card">
                 <h2>История игр в кости</h2>
@@ -2524,7 +2555,7 @@
                 <label>Имя / Логин человека:</label><input type="text" id="debt-person" placeholder="Максим">
                 <label style="margin-top: 15px; display: block;">Сумма (₽):</label><input type="text" id="debt-amount" placeholder="1 000 000" oninput="formatMoneyInput(this)">
                 <label style="margin-top: 15px; display: block;">Тип долга:</label><select id="debt-type"><option value="i_owe">Я должен</option><option value="owes_me">Мне должны</option></select>
-                <button id="btn-add-debt" style="margin-top: 15px;">Добавить долг</button>
+                <button type="button" id="btn-add-debt" style="margin-top: 15px;">Добавить долг</button>
             </div>
             <div class="card">
                 <h2>Список долгов</h2>
