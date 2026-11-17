@@ -59,6 +59,7 @@
         button:hover { transform: translateY(-1px); }
         button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
         button.danger { background: linear-gradient(135deg, #f87171 0%, #dc2626 100%); color: #fff; }
+        button.success-btn { background: linear-gradient(135deg, #34d399 0%, #059669 100%); color: #000; }
         button.secondary { background: rgba(55, 65, 81, 0.8); color: #fff; border: 1px solid var(--card-border); box-shadow: none; }
         table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 10px; }
         th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--card-border); font-size: 0.93rem; vertical-align: middle; }
@@ -87,7 +88,6 @@
         .ctrl-row { display: flex; align-items: center; gap: 10px; background: rgba(3, 7, 18, 0.45); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); margin-top: 8px; }
         .ctrl-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--accent); }
         .ctrl-row input[type="text"] { margin-top: 0; flex: 1; padding: 9px 12px; }
-        /* Универсальные компактные таблицы с тулбаром, скроллом и пагинацией (для Торговой тетради и Логов) */
         .data-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
         .data-toolbar select, .data-toolbar input { margin-top: 0; padding: 10px 12px; font-size: 0.9rem; }
         .scroll-table-box { max-height: 480px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 14px; background: rgba(3, 7, 18, 0.55); }
@@ -110,6 +110,7 @@
         .sell-inline-box { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
         .sell-inline-box input { width: 120px; margin: 0; padding: 6px 10px; font-size: 0.85rem; }
         .sell-inline-box button { width: auto; margin: 0; padding: 6px 10px; font-size: 0.8rem; }
+        .reg-status-banner { font-size: 0.84rem; padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; text-align: center; font-weight: 600; }
         #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
         .toast { background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(12px); border: 1px solid var(--card-border); color: var(--text-color); padding: 14px 22px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-weight: 600; font-size: 0.95rem; animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; border-left: 4px solid var(--accent); }
         .toast.success { border-left-color: var(--success); }
@@ -166,7 +167,6 @@
             if (el) { el.textContent = fmt(val) + ' ₽'; el.style.color = val >= 0 ? 'var(--success)' : 'var(--danger)'; }
         };
 
-        // Надежная проверка: продан ли лот (учитывает старые записи, где мог не проставиться status, но есть sellPrice или soldTime)
         const isItemSold = (i) => i && (i.status === 'sold' || Number(i.sellPrice) > 0 || Boolean(i.soldTime));
 
         const formatTsDateTime = (ts) => {
@@ -179,7 +179,7 @@
         window.showToast = function(msg, type = 'success') {
             let c = $('toast-container') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'toast-container' }));
             let t = c.appendChild(Object.assign(document.createElement('div'), { className: `toast ${type}`, textContent: msg }));
-            setTimeout(() => t.remove(), 3000);
+            setTimeout(() => t.remove(), 3500);
         };
 
         window.formatMoneyInput = function(input) {
@@ -194,7 +194,7 @@
                 siteTitle: "Помощник Россия Онлайн",
                 authCharNamePlaceholder: "Имя Фамилия персонажа (напр. Иван Иванов)",
                 authStaticPlaceholder: "Статик (напр. 12345)",
-                authLoginPlaceholder: "Логин (выданный для подписки)",
+                authLoginPlaceholder: "Логин",
                 authPassPlaceholder: "Пароль",
                 tabPerekup: "📈 Перекуп",
                 tabFarm: "💰 Фарм",
@@ -247,6 +247,7 @@
         let siteConfig = JSON.parse(JSON.stringify(defaultSiteConfig));
         let currentUser = null, currentLogin = "";
         let isUserDataLoaded = false;
+        let isProcessingRegistration = false;
         let pendingRegistrationProfile = null;
         let sellingItemId = null;
         let userData = {
@@ -258,6 +259,8 @@
         };
         let allUsersCache = [];
         let allowedUsersMapCache = {};
+        let pendingRequestsMapCache = {};
+        let openRegistrationEnabled = false;
         let globalLogsCache = [];
         let adminLogsPage = 1;
         let ledgerPage = 1;
@@ -285,6 +288,29 @@
             return "";
         }
 
+        // Обновление плашки статуса регистрации на экране входа
+        async function refreshAuthBanner() {
+            try {
+                let snap = await getDoc(doc(db, "system", "config"));
+                openRegistrationEnabled = snap.exists() ? Boolean(snap.data().openRegistration) : false;
+                if ($('adm-open-reg-toggle')) $('adm-open-reg-toggle').checked = openRegistrationEnabled;
+                let banner = $('reg-mode-banner');
+                if (banner) {
+                    if (openRegistrationEnabled) {
+                        banner.style.background = 'rgba(16, 185, 129, 0.15)';
+                        banner.style.color = 'var(--success)';
+                        banner.style.border = '1px solid rgba(16, 185, 129, 0.35)';
+                        banner.textContent = '🔓 Открыта подача заявок на регистрацию! Заполните данные, и администратор одобрит доступ.';
+                    } else {
+                        banner.style.background = 'rgba(245, 158, 11, 0.12)';
+                        banner.style.color = 'var(--accent)';
+                        banner.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+                        banner.textContent = '🔒 Регистрация доступна по логинам, которым администратор выдал подписку.';
+                    }
+                }
+            } catch (e) {}
+        }
+
         window.switchAuthMode = function(mode) {
             let isReg = mode === 'register';
             $('auth-tab-login').classList.toggle('active', !isReg);
@@ -292,6 +318,7 @@
             $('reg-extra-fields').style.display = isReg ? 'block' : 'none';
             $('btn-login').style.display = isReg ? 'none' : 'block';
             $('btn-register').style.display = isReg ? 'block' : 'none';
+            if (isReg) refreshAuthBanner();
         };
 
         function checkDateInPeriod(dateStr, timestampMs, mode, customDateVal) {
@@ -652,6 +679,7 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             loadSiteConfig();
+            refreshAuthBanner();
 
             document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', e => { e.preventDefault(); switchTab(b.dataset.tab, true); }));
             document.querySelectorAll('.farm-sub').forEach(b => b.addEventListener('click', () => switchFarmSub(b.dataset.farmSub, b.textContent.trim())));
@@ -677,13 +705,11 @@
             $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
             $('admin-level-picker').addEventListener('change', renderAdminCarsList);
 
-            // Слушатели фильтров Торговой тетради
             ['ledger-status-filter', 'ledger-sort', 'ledger-limit'].forEach(id => {
                 $(id)?.addEventListener('change', () => { ledgerPage = 1; renderResellerLedger(); });
             });
             $('ledger-search')?.addEventListener('input', () => { ledgerPage = 1; renderResellerLedger(); });
 
-            // Слушатели фильтров Логов в админке
             ['admin-log-user-filter', 'admin-log-type-filter', 'admin-log-sort', 'admin-log-limit'].forEach(id => {
                 $(id)?.addEventListener('change', () => { adminLogsPage = 1; renderAdminLogs(); });
             });
@@ -736,13 +762,23 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
+                    // Если сейчас идет подача новой заявки на регистрацию — ждем сохранения данных заявки и выходим
+                    if (isProcessingRegistration) return;
+
                     isUserDataLoaded = false;
                     currentLogin = user.email.split('@')[0];
                     if (currentLogin !== ADMIN_LOGIN) {
                         let snap = await getDoc(doc(db, "system", "config"));
-                        userExpiryTime = snap.exists() ? (snap.data().allowedUsersMap?.[currentLogin] || 0) : 0;
+                        let cfgData = snap.exists() ? snap.data() : {};
+                        userExpiryTime = cfgData.allowedUsersMap?.[currentLogin] || 0;
+                        let isPending = Boolean(cfgData.pendingRequestsMap?.[currentLogin]);
+
                         if (!userExpiryTime || Date.now() > userExpiryTime) {
-                            showToast("Срок действия подписки истек!", "error");
+                            if (isPending) {
+                                showToast("⏳ Ваша заявка на рассмотрении! Дождитесь одобрения администратора.", "error");
+                            } else {
+                                showToast("Срок действия подписки истек или заявка отклонена!", "error");
+                            }
                             return signOut(auth);
                         }
                     } else userExpiryTime = Date.now() + 31536000000;
@@ -765,6 +801,7 @@
                     if (globalRefreshInterval) { clearInterval(globalRefreshInterval); globalRefreshInterval = null; }
                     $('auth-section').style.display = 'block';
                     $('app-section').style.display = 'none';
+                    refreshAuthBanner();
                 }
             });
 
@@ -800,8 +837,14 @@
 
                 try {
                     let cSnap = await getDoc(doc(db, "system", "config"));
-                    allowedUsersMapCache = cSnap.exists() ? (cSnap.data().allowedUsersMap || {}) : {};
-                } catch (e) { allowedUsersMapCache = {}; }
+                    let cData = cSnap.exists() ? cSnap.data() : {};
+                    allowedUsersMapCache = cData.allowedUsersMap || {};
+                    pendingRequestsMapCache = cData.pendingRequestsMap || {};
+                    openRegistrationEnabled = Boolean(cData.openRegistration);
+                } catch (e) {
+                    allowedUsersMapCache = {};
+                    pendingRequestsMapCache = {};
+                }
 
                 try {
                     let gSnap = await getDoc(doc(db, "system", "logs"));
@@ -810,6 +853,7 @@
 
                 renderRatings(all);
                 if (currentLogin === ADMIN_LOGIN) {
+                    renderPendingRequestsList();
                     renderAllowedUsersList();
                     renderAdminUsersProfiles();
                     renderAdminLogs();
@@ -947,7 +991,83 @@
             });
         }
 
-        // ==================== АДМИН-РЕДАКТОР ====================
+        // ==================== АДМИН-РЕДАКТОР ЗАЯВОК, ПОДПИСОК И ПРОФИЛЕЙ ====================
+        window.toggleOpenRegistration = async function(cb) {
+            openRegistrationEnabled = cb.checked;
+            try {
+                await setDoc(doc(db, "system", "config"), { openRegistration: openRegistrationEnabled }, { merge: true });
+                showToast(openRegistrationEnabled ? "🔓 Подача заявок на регистрацию ОТКРЫТА!" : "🔒 Регистрация переведена в закрытый режим (только по выданным логинам).");
+            } catch (e) { showToast("Ошибка: " + e.message, "error"); }
+        };
+
+        // Отрисовка входящих заявок на регистрацию с кнопками Одобрить / Отклонить
+        function renderPendingRequestsList() {
+            if ($('adm-open-reg-toggle')) $('adm-open-reg-toggle').checked = openRegistrationEnabled;
+
+            let keys = Object.keys(pendingRequestsMapCache || {});
+            let reqArr = keys.map(login => ({ login, ...pendingRequestsMapCache[login] })).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
+
+            // Счетчик заявок на кнопке Админ-панели
+            let navAdm = $('nav-admin');
+            if (navAdm) {
+                navAdm.innerHTML = reqArr.length > 0
+                    ? `👑 Админ-панель <span style="background:var(--danger);color:#fff;padding:2px 7px;border-radius:10px;font-size:0.78rem;margin-left:4px;">+${reqArr.length}</span>`
+                    : `👑 Админ-панель`;
+            }
+
+            renderList('pending-requests-list', reqArr, "Новых заявок на регистрацию нет", 4, (r, idx) => `
+                <tr>
+                    <td><strong style="color:var(--accent);">${r.login}</strong><br><small style="color:var(--text-muted);">${formatTsDateTime(r.requestedAt)}</small></td>
+                    <td><strong>${r.charName || '—'}</strong> ${r.staticId ? `<span class="static-badge">#${r.staticId}</span>` : ''}</td>
+                    <td><input type="number" class="inline-input" id="req-days-${idx}" value="3" step="0.5" min="0.5" style="width:90px;" title="На сколько дней выдать доступ"></td>
+                    <td style="text-align:right;white-space:nowrap;">
+                        <button type="button" class="success-btn" style="width:auto;padding:7px 12px;font-size:0.82rem;margin:0;" onclick="approveRegistrationRequest('${r.login}', ${idx})">✅ Одобрить</button>
+                        <button type="button" class="danger" style="width:auto;padding:7px 12px;font-size:0.82rem;margin:0 0 0 6px;" onclick="rejectRegistrationRequest('${r.login}', '${r.uid || ''}')">❌ Отклонить</button>
+                    </td>
+                </tr>
+            `);
+        }
+
+        window.approveRegistrationRequest = async function(login, idx) {
+            let days = parseFloat($(`req-days-${idx}`)?.value) || 3;
+            try {
+                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                let data = snap.exists() ? snap.data() : {};
+                let allowedMap = { ...(data.allowedUsersMap || {}) };
+                let pendingMap = { ...(data.pendingRequestsMap || {}) };
+                let reqInfo = pendingMap[login];
+
+                allowedMap[login] = Date.now() + (days * 86400000);
+                delete pendingMap[login];
+
+                await setDoc(ref, { allowedUsersMap: allowedMap, pendingRequestsMap: pendingMap }, { merge: true });
+
+                if (reqInfo?.uid) {
+                    await setDoc(doc(db, "users", reqInfo.uid), { status: "approved" }, { merge: true });
+                }
+
+                await loadGlobalRatings();
+                showToast(`Заявка «${login}» одобрена на ${days} дн.!`);
+            } catch (e) { showToast("Ошибка: " + e.message, "error"); }
+        };
+
+        window.rejectRegistrationRequest = async function(login, uid) {
+            if (!confirm(`Отклонить заявку игрока «${login}»?`)) return;
+            try {
+                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                if (snap.exists()) {
+                    let pendingMap = { ...(snap.data().pendingRequestsMap || {}) };
+                    delete pendingMap[login];
+                    await setDoc(ref, { pendingRequestsMap: pendingMap }, { merge: true });
+                }
+                if (uid) {
+                    try { await deleteDoc(doc(db, "users", uid)); } catch (e) {}
+                }
+                await loadGlobalRatings();
+                showToast(`Заявка «${login}» отклонена и удалена!`, "error");
+            } catch (e) { showToast("Ошибка: " + e.message, "error"); }
+        };
+
         function getRemainingDiffForLogin(login) {
             if (login === ADMIN_LOGIN) return 9999999999999;
             let exp = allowedUsersMapCache[login];
@@ -978,9 +1098,10 @@
 
             renderList('admin-users-profiles-list', sorted, "Нет зарегистрированных пользователей", 6, (u, idx) => {
                 let isAdm = u.login === ADMIN_LOGIN;
+                let isPend = Boolean(pendingRequestsMapCache[u.login]);
                 let subStatusHtml = isAdm
                     ? `<span style="color:var(--accent);font-weight:bold;">Безлимит (Админ)</span>`
-                    : `<span style="color:${u.diff > 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;display:block;font-size:0.8rem;margin-bottom:4px;">${u.diff > 0 ? formatTime(u.diff) : 'Нет / Истекла'}</span>
+                    : `<span style="color:${u.diff > 0 ? 'var(--success)' : (isPend ? 'var(--accent)' : 'var(--danger)')};font-weight:bold;display:block;font-size:0.8rem;margin-bottom:4px;">${u.diff > 0 ? formatTime(u.diff) : (isPend ? '⏳ Ждет одобрения' : 'Нет / Истекла')}</span>
                        <input type="number" class="inline-input" id="adm-prof-days-${idx}" value="${u.remDays}" step="0.5" min="0" placeholder="Дней">`;
 
                 return `
@@ -1012,7 +1133,10 @@
                 await setDoc(doc(db, "users", uid), { login: newLogin, charName, staticId }, { merge: true });
                 if (oldLogin !== ADMIN_LOGIN) {
                     let ref = doc(db, "system", "config"), snap = await getDoc(ref);
-                    let map = snap.exists() ? { ...(snap.data().allowedUsersMap || {}) } : {};
+                    let data = snap.exists() ? snap.data() : {};
+                    let map = { ...(data.allowedUsersMap || {}) };
+                    let pendingMap = { ...(data.pendingRequestsMap || {}) };
+
                     if (newLogin !== oldLogin) {
                         if (map[oldLogin] && !map[newLogin]) map[newLogin] = map[oldLogin];
                         delete map[oldLogin];
@@ -1020,11 +1144,13 @@
                     if (daysInput) {
                         let dVal = parseFloat(daysInput.value);
                         if (!isNaN(dVal)) {
-                            if (dVal > 0) map[newLogin] = Date.now() + (dVal * 86400000);
-                            else delete map[newLogin];
+                            if (dVal > 0) {
+                                map[newLogin] = Date.now() + (dVal * 86400000);
+                                delete pendingMap[newLogin];
+                            } else delete map[newLogin];
                         }
                     }
-                    await setDoc(ref, { allowedUsersMap: map }, { merge: true });
+                    await setDoc(ref, { allowedUsersMap: map, pendingRequestsMap: pendingMap }, { merge: true });
                 }
                 if (currentUser && currentUser.uid === uid) {
                     userData.charName = charName;
@@ -1043,10 +1169,10 @@
                 let ref = doc(db, "system", "config"), snap = await getDoc(ref);
                 if (snap.exists()) {
                     let map = { ...(snap.data().allowedUsersMap || {}) };
-                    if (map[login]) {
-                        delete map[login];
-                        await setDoc(ref, { allowedUsersMap: map }, { merge: true });
-                    }
+                    let pMap = { ...(snap.data().pendingRequestsMap || {}) };
+                    delete map[login];
+                    delete pMap[login];
+                    await setDoc(ref, { allowedUsersMap: map, pendingRequestsMap: pMap }, { merge: true });
                 }
                 await loadGlobalRatings();
                 showToast(`Профиль и подписка «${login}» удалены!`, "error");
@@ -1365,7 +1491,7 @@
                     if (isItemSold(r)) {
                         let sellTs = Number(r.soldTime) || (buyTs + 1000);
                         let sellD = sellTs > 1000000000000 ? new Date(sellTs) : null;
-                        let p = (Number(r.sellPrice) || 0) - (Number(r.buyPrice) || 0);
+                        let p = (r.sellPrice || 0) - (r.buyPrice || 0);
                         pushUnique(
                             l, sellTs,
                             sellD ? sellD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
@@ -1457,9 +1583,12 @@
             let login = $('new-allowed-login').value.trim().toLowerCase(), days = parseFloat($('new-allowed-days').value) || 30;
             if (!login) return;
             let ref = doc(db, "system", "config"), snap = await getDoc(ref);
-            let map = snap.exists() ? (snap.data().allowedUsersMap || {}) : {};
+            let data = snap.exists() ? snap.data() : {};
+            let map = { ...(data.allowedUsersMap || {}) };
+            let pendingMap = { ...(data.pendingRequestsMap || {}) };
             map[login] = Date.now() + (days * 86400000);
-            await setDoc(ref, { allowedUsersMap: map }, { merge: true });
+            delete pendingMap[login];
+            await setDoc(ref, { allowedUsersMap: map, pendingRequestsMap: pendingMap }, { merge: true });
             $('new-allowed-login').value = '';
             await loadGlobalRatings();
             showToast(`Доступ для "${login}" выдан!`);
@@ -1548,6 +1677,7 @@
                 : `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(basePrice)} ₽</strong>`;
         }
 
+        // Авторизация и Регистрация (с поддержкой открытой подачи заявок на одобрение админом)
         async function authAction(isReg) {
             let l = $('auth-login').value.trim().toLowerCase(), p = $('auth-pass').value;
             if (!l || !p) return showToast("Введите логин и пароль!", "error");
@@ -1558,19 +1688,46 @@
                     if (!charName || !staticId) return showToast("Заполните Имя Фамилию персонажа и Статик!", "error");
 
                     let snap = await getDoc(doc(db, "system", "config"));
-                    let map = snap.exists() ? (snap.data().allowedUsersMap || {}) : {};
-                    if (l !== ADMIN_LOGIN && (!map[l] || Date.now() > map[l])) {
-                        return showToast("Для этого логина нет активной подписки!", "error");
+                    let cfg = snap.exists() ? snap.data() : {};
+                    let map = cfg.allowedUsersMap || {};
+                    let isOpenReg = Boolean(cfg.openRegistration);
+                    let hasPreApprovedSub = l === ADMIN_LOGIN || (map[l] && Date.now() < map[l]);
+
+                    if (!hasPreApprovedSub && !isOpenReg) {
+                        return showToast("Регистрация закрыта! Обратитесь к администратору за подпиской.", "error");
                     }
+
                     pendingRegistrationProfile = { charName, staticId };
-                    await createUserWithEmailAndPassword(auth, loginToEmail(l), p);
+                    isProcessingRegistration = !hasPreApprovedSub;
+
+                    let cred = await createUserWithEmailAndPassword(auth, loginToEmail(l), p);
+
+                    if (!hasPreApprovedSub) {
+                        // Сохраняем профиль и заявку в очередь на одобрение
+                        let pendingMap = { ...(cfg.pendingRequestsMap || {}) };
+                        pendingMap[l] = { uid: cred.user.uid, login: l, charName, staticId, requestedAt: Date.now() };
+                        await setDoc(doc(db, "system", "config"), { pendingRequestsMap: pendingMap }, { merge: true });
+                        await setDoc(doc(db, "users", cred.user.uid), {
+                            login: l, charName, staticId, status: "pending",
+                            history: [], resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {},
+                            activityLogs: [{ id: Date.now(), login: l, ...getMskNow(), action: "📩 Подана заявка на регистрацию", details: `${charName} (#${staticId})` }]
+                        }, { merge: true });
+
+                        isProcessingRegistration = false;
+                        pendingRegistrationProfile = null;
+                        await signOut(auth);
+                        switchAuthMode('login');
+                        showToast("✅ Заявка отправлена! Вы сможете войти сразу после одобрения администратором.");
+                    }
                 } else {
                     await signInWithEmailAndPassword(auth, loginToEmail(l), p);
                 }
-            } catch (e) { showToast(isReg ? "Ошибка регистрации: " + e.message : "Неверный логин или пароль!", "error"); }
+            } catch (e) {
+                isProcessingRegistration = false;
+                showToast(isReg ? "Ошибка регистрации: " + e.message : "Неверный логин или пароль!", "error");
+            }
         }
 
-        // Нормализация всех лотов перекупа при загрузке (исправляет старые записи без id/startTime/status)
         function normalizeResellerItems() {
             if (!Array.isArray(userData.resellerItems)) userData.resellerItems = [];
             userData.resellerItems.forEach((item, idx) => {
@@ -1722,7 +1879,7 @@
             await commitChange("Развоз закладок отменен", "error", false, "Отмена развоза закладок", "0 ₽");
         }
 
-        // ==================== ПЕРЕКУП И КОМПАКТНАЯ ТОРГОВАЯ ТЕТРАДЬ ====================
+        // ==================== ПЕРЕКУП И ТОРГОВАЯ ТЕТРАДЬ ====================
         async function addResellerItem() {
             let name = $('res-name').value.trim(), buyPrice = getCleanNumber('res-buy');
             let isRedemption = $('res-redemption').checked, owner = $('res-owner').value.trim();
@@ -1771,7 +1928,6 @@
             await commitChange(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error", true, "Продажа вещи (Перекуп)", `${item.name}: продано за ${fmt(sellPrice)} ₽ (прибыль ${fmt(profit)} ₽)`);
         };
 
-        // Компактная отрисовка Торговой тетради с фильтрацией, сортировкой и пагинацией
         function renderResellerLedger() {
             let allItems = userData.resellerItems || [];
             let statusFilter = $('ledger-status-filter')?.value || 'all';
@@ -2071,7 +2227,6 @@
                 <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>⏳ <span class="res-timer" data-start="${i.startTime}">${formatTime(Date.now() - i.startTime)}</span></td><td>Активен</td>${resActions(i)}</tr>
             `);
 
-            // Рендер компактной Торговой тетради
             renderResellerLedger();
 
             let cList = userData.courierHistory || [], todayC = cList.filter(c => (c.date || today) === today);
@@ -2127,6 +2282,7 @@
         </div>
 
         <div id="reg-extra-fields" style="display:none;">
+            <div id="reg-mode-banner" class="reg-status-banner"></div>
             <input type="text" id="auth-char-name" placeholder="Имя Фамилия персонажа (напр. Иван Иванов)">
             <input type="text" id="auth-static" placeholder="Статик (напр. 12345)">
         </div>
@@ -2135,7 +2291,7 @@
         <input type="password" id="auth-pass" placeholder="Пароль">
 
         <button type="button" id="btn-login" style="margin-top:16px;">Войти в аккаунт</button>
-        <button type="button" id="btn-register" style="display:none; margin-top:16px;">Зарегистрироваться</button>
+        <button type="button" id="btn-register" style="display:none; margin-top:16px;">Подать заявку / Зарегистрироваться</button>
     </div>
 
     <div id="app-section" style="display:none;">
@@ -2158,18 +2314,38 @@
         <div id="tab-admin" class="tab-content">
             <div class="sub-tabs">
                 <div class="sub-tabs-links">
-                    <button type="button" class="sub-btn admin-sub active" data-admin-sub="subs">🔑 Подписки и Игроки</button>
+                    <button type="button" class="sub-btn admin-sub active" data-admin-sub="subs">🔑 Подписки и Заявки</button>
                     <button type="button" class="sub-btn admin-sub" data-admin-sub="cars">🚗 Авто и Уровни</button>
                     <button type="button" class="sub-btn admin-sub" data-admin-sub="fields">🗂 Разделы, Кнопки и Цены</button>
                     <button type="button" class="sub-btn admin-sub" data-admin-sub="logs">📋 Логи игроков</button>
                 </div>
             </div>
 
-            <!-- Админ 1: Подписки и профили игроков -->
+            <!-- Админ 1: Заявки на регистрацию, подписки и профили игроков -->
             <div id="admin-sub-subs" class="admin-content active">
                 <div class="card admin-card">
-                    <h2>🔑 Выдача подписки по логину (разрешение на регистрацию и вход)</h2>
-                    <input type="text" id="new-allowed-login" placeholder="Логин пользователя (по нему игрок сможет зарегистрироваться)">
+                    <h2>📩 Режим регистрации и Входящие заявки</h2>
+                    <div class="ctrl-row" style="margin-bottom: 18px;">
+                        <input type="checkbox" id="adm-open-reg-toggle" onchange="toggleOpenRegistration(this)">
+                        <label for="adm-open-reg-toggle" style="cursor:pointer; font-weight:700; color:var(--accent);">🔓 Открыть свободную подачу заявок на регистрацию (новые игроки попадают в таблицу ниже на одобрение)</label>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:170px;">Логин / Дата заявки</th>
+                                <th>Персонаж (Имя Фамилия #Статик)</th>
+                                <th style="width:110px;">Дней доступа</th>
+                                <th style="width:210px; text-align:right;">Решение</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-requests-list"><tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Новых заявок нет</td></tr></tbody>
+                    </table>
+                </div>
+
+                <div class="card admin-card">
+                    <h2>🔑 Ручная выдача подписки по логину</h2>
+                    <input type="text" id="new-allowed-login" placeholder="Логин пользователя (по нему игрок сможет зарегистрироваться или войти)">
                     <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок (в днях):</label>
                     <input type="number" id="new-allowed-days" value="30" step="0.1" min="0.1">
                     <button type="button" id="btn-add-allowed">Выдать / продлить доступ</button>
@@ -2452,7 +2628,7 @@
                 </div>
             </div>
 
-            <!-- Компактная Торговая тетрадь с фильтрами, скроллом и пагинацией -->
+            <!-- Компактная Торговая тетрадь -->
             <div id="section-ledger" class="section-block">
                 <div class="card">
                     <h2>📓 Торговая тетрадь (История всех сделок и лотов)</h2>
