@@ -86,10 +86,12 @@
         .grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; align-items: center; }
         .inline-input { margin-top: 0; padding: 8px 10px; font-size: 0.9rem; }
         .ctrl-row { display: flex; align-items: center; gap: 10px; background: rgba(3, 7, 18, 0.45); padding: 10px 14px; border-radius: 12px; border: 1px solid var(--card-border); margin-top: 8px; }
-        .ctrl-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+        .ctrl-row input[type="checkbox"], .row-check { width: 19px; height: 19px; margin: 0; cursor: pointer; accent-color: var(--accent); }
         .ctrl-row input[type="text"] { margin-top: 0; flex: 1; padding: 9px 12px; }
         .data-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
         .data-toolbar select, .data-toolbar input { margin-top: 0; padding: 10px 12px; font-size: 0.9rem; }
+        .bulk-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); padding: 12px 14px; border-radius: 12px; margin-bottom: 14px; }
+        .bulk-bar input, .bulk-bar select, .bulk-bar button { margin-top: 0; width: auto; padding: 9px 12px; font-size: 0.88rem; }
         .scroll-table-box { max-height: 480px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 14px; background: rgba(3, 7, 18, 0.55); }
         .scroll-table-box table { margin-top: 0; }
         .scroll-table-box thead th { position: sticky; top: 0; background: #0b1120; z-index: 2; box-shadow: 0 1px 0 var(--card-border); }
@@ -144,6 +146,10 @@
         const sumBy = (arr, fn) => (arr || []).reduce((s, x) => s + (Number(fn(x)) || 0), 0);
         const loginToEmail = (l) => l.trim().toLowerCase() + "@gta-tracker.local";
         const isNight = (d = new Date()) => { let m = d.getHours() * 60 + d.getMinutes(); return m >= 60 && m < 540; };
+        const cleanNumStr = (str) => parseFloat(String(str || '').replace(/[^\d.-]/g, '')) || 0;
+        const getCleanNumber = (id) => cleanNumStr($(id)?.value);
+        const isItemSold = (i) => i && (i.status === 'sold' || Number(i.sellPrice) > 0 || Boolean(i.soldTime));
+
         const getMskNow = () => {
             let now = new Date();
             let dateStr = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
@@ -155,8 +161,6 @@
                 isoDate: `${yyyy}-${mm}-${dd}`
             };
         };
-        const cleanNumStr = (str) => parseFloat(String(str || '').replace(/[^\d.-]/g, '')) || 0;
-        const getCleanNumber = (id) => cleanNumStr($(id)?.value);
 
         const renderList = (id, arr, emptyMsg, cols, fn) => {
             let el = $(id);
@@ -166,15 +170,19 @@
             let el = $(id);
             if (el) { el.textContent = fmt(val) + ' ₽'; el.style.color = val >= 0 ? 'var(--success)' : 'var(--danger)'; }
         };
-
-        const isItemSold = (i) => i && (i.status === 'sold' || Number(i.sellPrice) > 0 || Boolean(i.soldTime));
-
         const formatTsDateTime = (ts) => {
             let num = Number(ts);
             if (!num || num < 1000000000000) return '—';
             let d = new Date(num);
             return d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) + ' ' + d.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
         };
+
+        // Безопасная перезапись карт system/config (updateDoc удаляет стертые ключи, в отличие от setDoc merge)
+        async function updateSystemConfigMaps(payload) {
+            let ref = doc(db, "system", "config");
+            try { await updateDoc(ref, payload); }
+            catch (e) { await setDoc(ref, payload, { merge: true }); }
+        }
 
         window.showToast = function(msg, type = 'success') {
             let c = $('toast-container') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'toast-container' }));
@@ -196,26 +204,12 @@
                 authStaticPlaceholder: "Статик (напр. 12345)",
                 authLoginPlaceholder: "Логин",
                 authPassPlaceholder: "Пароль",
-                tabPerekup: "📈 Перекуп",
-                tabFarm: "💰 Фарм",
-                tabCasino: "🎰 Казино",
-                tabDebts: "💸 Долги",
-                tabRating: "🏆 Рейтинг",
-                subCabinet: "Мой кабинет",
-                subProperty: "Имущество",
-                subLedger: "Торговая тетрадь",
-                subAnalytics: "Аналитика",
-                subTheft: "🚗 Угонщик",
-                subCourier: "📦 Закладчик",
-                subHouse: "🏠 Ограбление домов",
-                btnAddReseller: "Добавить в учет",
-                btnStartTheft: "Начать поиск / угон",
-                btnFinishTheft: "Закончить сдачу",
-                btnCaughtTheft: "Поймали менты",
-                btnAddCourier: "Начать развоз закладок",
-                btnAddHouse: "Начать ограбление дома",
-                btnAddDice: "Записать в историю",
-                btnAddDebt: "Добавить долг"
+                tabPerekup: "📈 Перекуп", tabFarm: "💰 Фарм", tabCasino: "🎰 Казино", tabDebts: "💸 Долги", tabRating: "🏆 Рейтинг",
+                subCabinet: "Мой кабинет", subProperty: "Имущество", subLedger: "Торговая тетрадь", subAnalytics: "Аналитика",
+                subTheft: "🚗 Угонщик", subCourier: "📦 Закладчик", subHouse: "🏠 Ограбление домов",
+                btnAddReseller: "Добавить в учет", btnStartTheft: "Начать поиск / угон", btnFinishTheft: "Закончить сдачу",
+                btnCaughtTheft: "Поймали менты", btnAddCourier: "Начать развоз закладок", btnAddHouse: "Начать ограбление дома",
+                btnAddDice: "Записать в историю", btnAddDebt: "Добавить долг"
             },
             visibility: {
                 tabPerekup: true, tabFarm: true, tabCasino: true, tabDebts: true, tabRating: true,
@@ -246,31 +240,22 @@
 
         let siteConfig = JSON.parse(JSON.stringify(defaultSiteConfig));
         let currentUser = null, currentLogin = "";
-        let isUserDataLoaded = false;
-        let isProcessingRegistration = false;
-        let pendingRegistrationProfile = null;
-        let sellingItemId = null;
+        let isUserDataLoaded = false, isProcessingRegistration = false;
+        let pendingRegistrationProfile = null, sellingItemId = null;
         let userData = {
             login: "", charName: "", staticId: "",
-            history: [], activeTheft: null,
-            courierHistory: [], activeCourier: null,
-            houseHistory: [], activeHouse: null,
-            resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
+            history: [], activeTheft: null, courierHistory: [], activeCourier: null,
+            houseHistory: [], activeHouse: null, resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
         };
-        let allUsersCache = [];
-        let allowedUsersMapCache = {};
-        let pendingRequestsMapCache = {};
-        let openRegistrationEnabled = false;
-        let globalLogsCache = [];
-        let adminLogsPage = 1;
-        let ledgerPage = 1;
-        let ratingPeriod = 'today', ratingCustomDate = '';
-        let farmPeriod = 'today', farmCustomDate = '';
+        let allUsersCache = [], allowedUsersMapCache = {}, pendingRequestsMapCache = {};
+        let selectedAdminUsers = new Set();
+        let openRegistrationEnabled = false, globalLogsCache = [];
+        let adminLogsPage = 1, ledgerPage = 1;
+        let periods = { farm: { mode: 'today', date: '' }, rating: { mode: 'today', date: '' } };
         let subInterval = null, globalRefreshInterval = null, userExpiryTime = 0;
 
         function formatPublicPlayer(u) {
-            let name = (u.charName || "").trim();
-            let st = (u.staticId || "").trim().replace(/^#/, '');
+            let name = (u.charName || "").trim(), st = (u.staticId || "").trim().replace(/^#/, '');
             if (name && st) return `<strong>${name}</strong> <span class="static-badge">#${st}</span>`;
             if (name) return `<strong>${name}</strong>`;
             if (st) return `<strong>Игрок</strong> <span class="static-badge">#${st}</span>`;
@@ -280,15 +265,13 @@
 
         function formatBracketProfile(u) {
             if (!u) return "";
-            let name = (u.charName || "").trim();
-            let st = (u.staticId || "").trim().replace(/^#/, '');
+            let name = (u.charName || "").trim(), st = (u.staticId || "").trim().replace(/^#/, '');
             if (name && st) return ` <span style="color:var(--text-muted);font-weight:normal;">(${name} <b style="color:var(--accent);">#${st}</b>)</span>`;
             if (name) return ` <span style="color:var(--text-muted);font-weight:normal;">(${name})</span>`;
             if (st) return ` <span style="color:var(--text-muted);font-weight:normal;">(<b style="color:var(--accent);">#${st}</b>)</span>`;
             return "";
         }
 
-        // Обновление плашки статуса регистрации на экране входа
         async function refreshAuthBanner() {
             try {
                 let snap = await getDoc(doc(db, "system", "config"));
@@ -296,17 +279,12 @@
                 if ($('adm-open-reg-toggle')) $('adm-open-reg-toggle').checked = openRegistrationEnabled;
                 let banner = $('reg-mode-banner');
                 if (banner) {
-                    if (openRegistrationEnabled) {
-                        banner.style.background = 'rgba(16, 185, 129, 0.15)';
-                        banner.style.color = 'var(--success)';
-                        banner.style.border = '1px solid rgba(16, 185, 129, 0.35)';
-                        banner.textContent = '🔓 Открыта подача заявок на регистрацию! Заполните данные, и администратор одобрит доступ.';
-                    } else {
-                        banner.style.background = 'rgba(245, 158, 11, 0.12)';
-                        banner.style.color = 'var(--accent)';
-                        banner.style.border = '1px solid rgba(245, 158, 11, 0.3)';
-                        banner.textContent = '🔒 Регистрация доступна по логинам, которым администратор выдал подписку.';
-                    }
+                    banner.style.background = openRegistrationEnabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.12)';
+                    banner.style.color = openRegistrationEnabled ? 'var(--success)' : 'var(--accent)';
+                    banner.style.border = openRegistrationEnabled ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(245, 158, 11, 0.3)';
+                    banner.textContent = openRegistrationEnabled
+                        ? '🔓 Открыта подача заявок на регистрацию! Заполните данные, и администратор одобрит доступ.'
+                        : '🔒 Регистрация доступна по логинам, которым администратор выдал подписку.';
                 }
             } catch (e) {}
         }
@@ -321,93 +299,50 @@
             if (isReg) refreshAuthBanner();
         };
 
-        function checkDateInPeriod(dateStr, timestampMs, mode, customDateVal) {
+        // Единая логика периодов для Фарма и Рейтинга
+        function checkDateInPeriod(dateStr, ts, target) {
+            let { mode, date: customVal } = periods[target];
             if (mode === 'all') return true;
             let todayStr = getMskNow().date;
-            if (!dateStr && timestampMs > 1000000000000) {
-                dateStr = new Date(Number(timestampMs)).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
-            }
+            if (!dateStr && ts > 1000000000000) dateStr = new Date(Number(ts)).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
             let dStr = dateStr || todayStr;
             if (mode === 'today') return dStr === todayStr;
-            if (mode === 'custom') return customDateVal ? dStr === customDateVal : dStr === todayStr;
+            if (mode === 'custom') return customVal ? dStr === customVal : dStr === todayStr;
 
-            let parts = dStr.split('.');
-            if (parts.length !== 3) return false;
-            let recDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-            recDate.setHours(0, 0, 0, 0);
-
-            let tParts = todayStr.split('.');
-            let curDate = new Date(parseInt(tParts[2]), parseInt(tParts[1]) - 1, parseInt(tParts[0]));
-            curDate.setHours(0, 0, 0, 0);
-
-            let diffDays = (curDate - recDate) / 86400000;
-            if (mode === 'week') return diffDays >= 0 && diffDays < 7;
-            if (mode === 'month') return diffDays >= 0 && diffDays < 30;
-            return true;
+            let p = dStr.split('.'), t = todayStr.split('.');
+            if (p.length !== 3) return false;
+            let diffDays = (new Date(t[2], t[1] - 1, t[0]) - new Date(p[2], p[1] - 1, p[0])) / 86400000;
+            return mode === 'week' ? (diffDays >= 0 && diffDays < 7) : (diffDays >= 0 && diffDays < 30);
         }
 
-        function formatPeriodLabel(mode, customDateVal) {
-            if (mode === 'today') return 'за сегодня';
-            if (mode === 'week') return 'за 7 дней';
-            if (mode === 'month') return 'за 30 дней';
-            if (mode === 'all') return 'за всё время';
-            if (mode === 'custom') return customDateVal ? `за ${customDateVal}` : 'за дату';
-            return 'за период';
+        function formatPeriodLabel(target) {
+            let { mode, date } = periods[target];
+            return { today: 'за сегодня', week: 'за 7 дней', month: 'за 30 дней', all: 'за всё время', custom: date ? `за ${date}` : 'за дату' }[mode] || 'за период';
         }
 
-        window.setFarmPeriod = function(period) {
-            farmPeriod = period;
-            document.querySelectorAll('.farm-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
-            let dateInput = $('farm-custom-date');
-            if (dateInput) {
-                dateInput.style.display = period === 'custom' ? 'block' : 'none';
-                if (period === 'custom' && !dateInput.value) {
-                    dateInput.value = getMskNow().isoDate;
-                    let [y, m, d] = dateInput.value.split('-');
-                    farmCustomDate = `${d}.${m}.${y}`;
+        window.setPeriod = function(target, mode) {
+            periods[target].mode = mode;
+            document.querySelectorAll(`.${target}-period-btn`).forEach(b => b.classList.toggle('active', b.dataset.period === mode));
+            let inp = $(`${target}-custom-date`);
+            if (inp) {
+                inp.style.display = mode === 'custom' ? 'block' : 'none';
+                if (mode === 'custom' && !inp.value) {
+                    inp.value = getMskNow().isoDate;
+                    let [y, m, d] = inp.value.split('-');
+                    periods[target].date = `${d}.${m}.${y}`;
                 }
             }
-            renderState();
-            logAction("Выбран период статистики фарма", period === 'custom' ? `Дата: ${farmCustomDate}` : period);
+            target === 'farm' ? renderState() : renderRatings(allUsersCache);
+            logAction(`Период (${target === 'farm' ? 'Фарм' : 'Рейтинг'})`, mode === 'custom' ? periods[target].date : mode);
         };
 
-        window.onFarmDateChange = function(input) {
+        window.onPeriodDateChange = function(target, input) {
             if (!input.value) return;
             let [y, m, d] = input.value.split('-');
-            farmCustomDate = `${d}.${m}.${y}`;
-            farmPeriod = 'custom';
-            document.querySelectorAll('.farm-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === 'custom'));
-            renderState();
+            periods[target] = { mode: 'custom', date: `${d}.${m}.${y}` };
+            document.querySelectorAll(`.${target}-period-btn`).forEach(b => b.classList.toggle('active', b.dataset.period === 'custom'));
+            target === 'farm' ? renderState() : renderRatings(allUsersCache);
         };
-
-        window.setRatingPeriod = function(period) {
-            ratingPeriod = period;
-            document.querySelectorAll('.rating-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
-            let dateInput = $('rating-custom-date');
-            if (dateInput) {
-                dateInput.style.display = period === 'custom' ? 'block' : 'none';
-                if (period === 'custom' && !dateInput.value) {
-                    dateInput.value = getMskNow().isoDate;
-                    let [y, m, d] = dateInput.value.split('-');
-                    ratingCustomDate = `${d}.${m}.${y}`;
-                }
-            }
-            renderRatings(allUsersCache);
-            logAction("Выбран период рейтинга", period === 'custom' ? `Дата: ${ratingCustomDate}` : period);
-        };
-
-        window.onRatingDateChange = function(input) {
-            if (!input.value) return;
-            let [y, m, d] = input.value.split('-');
-            ratingCustomDate = `${d}.${m}.${y}`;
-            ratingPeriod = 'custom';
-            document.querySelectorAll('.rating-period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === 'custom'));
-            renderRatings(allUsersCache);
-            logAction("Выбрана дата в рейтинге", ratingCustomDate);
-        };
-
-        const isRecordInRatingPeriod = (dateStr, ts = 0) => checkDateInPeriod(dateStr, ts, ratingPeriod, ratingCustomDate);
-        const isRecordInFarmPeriod = (dateStr, ts = 0) => checkDateInPeriod(dateStr, ts, farmPeriod, farmCustomDate);
 
         function logAction(action, details = "", skipUserSave = false) {
             if (!currentUser || !currentLogin || !isUserDataLoaded) return;
@@ -425,8 +360,7 @@
 
             (async () => {
                 try {
-                    let gRef = doc(db, "system", "logs");
-                    let gSnap = await getDoc(gRef);
+                    let gRef = doc(db, "system", "logs"), gSnap = await getDoc(gRef);
                     let gEntries = gSnap.exists() ? (gSnap.data().entries || []) : [];
                     gEntries.unshift(entry);
                     if (gEntries.length > 400) gEntries.length = 400;
@@ -472,47 +406,30 @@
 
         function applySiteConfig() {
             let L = siteConfig.labels, V = siteConfig.visibility, D = siteConfig.defaults;
-
             $('main-title-text').textContent = L.siteTitle;
             if ($('auth-char-name')) $('auth-char-name').placeholder = L.authCharNamePlaceholder || "Имя Фамилия персонажа";
-            if ($('auth-static')) $('auth-static').placeholder = L.authStaticPlaceholder || "Статик (например: 12345)";
+            if ($('auth-static')) $('auth-static').placeholder = L.authStaticPlaceholder || "Статик";
             if ($('auth-login')) $('auth-login').placeholder = L.authLoginPlaceholder || "Логин";
             if ($('auth-pass')) $('auth-pass').placeholder = L.authPassPlaceholder || "Пароль";
 
-            const mapTextAndVis = [
-                ['nav-perekup', L.tabPerekup, V.tabPerekup],
-                ['nav-farm', L.tabFarm, V.tabFarm],
-                ['nav-casino', L.tabCasino, V.tabCasino],
-                ['nav-debts', L.tabDebts, V.tabDebts],
-                ['nav-rating', L.tabRating, V.tabRating],
+            [
+                ['nav-perekup', L.tabPerekup, V.tabPerekup], ['nav-farm', L.tabFarm, V.tabFarm],
+                ['nav-casino', L.tabCasino, V.tabCasino], ['nav-debts', L.tabDebts, V.tabDebts], ['nav-rating', L.tabRating, V.tabRating],
                 ['sub-link-cabinet', L.subCabinet, V.subCabinet, 'section-cabinet'],
                 ['sub-link-property', L.subProperty, V.subProperty, 'section-property'],
                 ['sub-link-ledger', L.subLedger, V.subLedger, 'section-ledger'],
                 ['sub-link-analytics', L.subAnalytics, V.subAnalytics, 'section-analytics'],
-                ['sub-btn-theft', L.subTheft, V.subTheft],
-                ['sub-btn-courier', L.subCourier, V.subCourier],
-                ['sub-btn-house', L.subHouse, V.subHouse]
-            ];
-            mapTextAndVis.forEach(([id, text, vis, blockId]) => {
-                let el = $(id);
-                if (el) {
-                    el.textContent = text;
-                    el.style.display = vis === false ? 'none' : '';
-                }
+                ['sub-btn-theft', L.subTheft, V.subTheft], ['sub-btn-courier', L.subCourier, V.subCourier], ['sub-btn-house', L.subHouse, V.subHouse]
+            ].forEach(([id, text, vis, blockId]) => {
+                if ($(id)) { $(id).textContent = text; $(id).style.display = vis === false ? 'none' : ''; }
                 if (blockId && $(blockId)) $(blockId).style.display = vis === false ? 'none' : '';
             });
 
-            const btnMap = {
-                'btn-add-reseller-item': L.btnAddReseller,
-                'btn-start': L.btnStartTheft,
-                'btn-finish': L.btnFinishTheft,
-                'btn-caught': L.btnCaughtTheft,
-                'btn-start-courier': L.btnAddCourier,
-                'btn-start-house': L.btnAddHouse,
-                'btn-add-dice': L.btnAddDice,
-                'btn-add-debt': L.btnAddDebt
-            };
-            Object.entries(btnMap).forEach(([id, txt]) => { if ($(id) && txt) $(id).textContent = txt; });
+            Object.entries({
+                'btn-add-reseller-item': L.btnAddReseller, 'btn-start': L.btnStartTheft, 'btn-finish': L.btnFinishTheft,
+                'btn-caught': L.btnCaughtTheft, 'btn-start-courier': L.btnAddCourier, 'btn-start-house': L.btnAddHouse,
+                'btn-add-dice': L.btnAddDice, 'btn-add-debt': L.btnAddDebt
+            }).forEach(([id, txt]) => { if ($(id) && txt) $(id).textContent = txt; });
 
             if (D.courierPrice > 0 && !$('courier-price').value) $('courier-price').value = fmt(D.courierPrice);
             if (D.houseAmount > 0 && !$('house-amount').value) $('house-amount').value = fmt(D.houseAmount);
@@ -541,37 +458,19 @@
 
         function renderDynamicCustomSections() {
             document.querySelectorAll('.dyn-generated').forEach(el => el.remove());
-
-            let navTabs = $('main-nav-tabs');
-            let adminNavBtn = $('nav-admin');
-            let farmLinks = $('farm-sub-links');
-            let farmTab = $('tab-farm');
-            let ratingTab = $('tab-rating');
-            let mainContainer = $('app-section');
+            let navTabs = $('main-nav-tabs'), adminNavBtn = $('nav-admin'), farmLinks = $('farm-sub-links');
+            let farmTab = $('tab-farm'), ratingTab = $('tab-rating'), mainContainer = $('app-section');
 
             (siteConfig.customSections || []).forEach(sec => {
                 if (sec.enabled === false) return;
-                let isFarm = sec.placement === 'farm';
-                let modeHtml = '';
+                let isFarm = sec.placement === 'farm', modeHtml = '';
 
                 if (sec.mode === 'amount') {
-                    modeHtml = `
-                        <label>${sec.unitLabel || 'Сумма заработка'} (₽):</label>
-                        <input type="text" id="dyn-amount-${sec.id}" value="${sec.defaultPrice > 0 ? fmt(sec.defaultPrice) : ''}" placeholder="Введите сумму" oninput="formatMoneyInput(this)">
-                    `;
+                    modeHtml = `<label>${sec.unitLabel || 'Сумма заработка'} (₽):</label><input type="text" id="dyn-amount-${sec.id}" value="${sec.defaultPrice > 0 ? fmt(sec.defaultPrice) : ''}" placeholder="Введите сумму" oninput="formatMoneyInput(this)">`;
                 } else if (sec.mode === 'count_custom') {
-                    modeHtml = `
-                        <label>${sec.unitLabel || 'Количество'}:</label>
-                        <input type="number" id="dyn-count-${sec.id}" placeholder="Например, 10">
-                        <label style="margin-top:15px;display:block;">Цена за 1 ед. (₽):</label>
-                        <input type="text" id="dyn-price-${sec.id}" value="${sec.defaultPrice > 0 ? fmt(sec.defaultPrice) : ''}" placeholder="Например, 15 000" oninput="formatMoneyInput(this)">
-                    `;
+                    modeHtml = `<label>${sec.unitLabel || 'Количество'}:</label><input type="number" id="dyn-count-${sec.id}" placeholder="Например, 10"><label style="margin-top:15px;display:block;">Цена за 1 ед. (₽):</label><input type="text" id="dyn-price-${sec.id}" value="${sec.defaultPrice > 0 ? fmt(sec.defaultPrice) : ''}" placeholder="Например, 15 000" oninput="formatMoneyInput(this)">`;
                 } else if (sec.mode === 'count_fixed') {
-                    modeHtml = `
-                        <div style="margin-bottom:10px;color:var(--text-muted);">Фиксированная ставка: <strong style="color:var(--accent);">${fmt(sec.defaultPrice)} ₽</strong> за 1 ед.</div>
-                        <label>${sec.unitLabel || 'Количество'}:</label>
-                        <input type="number" id="dyn-count-${sec.id}" placeholder="Введите количество">
-                    `;
+                    modeHtml = `<div style="margin-bottom:10px;color:var(--text-muted);">Фиксированная ставка: <strong style="color:var(--accent);">${fmt(sec.defaultPrice)} ₽</strong> за 1 ед.</div><label>${sec.unitLabel || 'Количество'}:</label><input type="number" id="dyn-count-${sec.id}" placeholder="Введите количество">`;
                 }
 
                 let innerBlock = `
@@ -579,59 +478,32 @@
                         ${sec.mode !== 'amount' ? `<div class="stat-card"><div>За сегодня (${sec.unitLabel || 'Ед.'})</div><div id="dyn-stat-cnt-${sec.id}" class="stat-value">0</div></div>` : ''}
                         <div class="stat-card"><div>Заработано за сегодня</div><div id="dyn-stat-earn-${sec.id}" class="stat-value">0 ₽</div></div>
                     </div>
-                    <div class="card">
-                        <h2>${sec.title}</h2>
-                        ${modeHtml}
-                        <button type="button" style="margin-top:15px;" onclick="addCustomSecRecord('${sec.id}')">${sec.btnText || 'Добавить запись'}</button>
-                    </div>
-                    <div class="card">
-                        <h2>История: ${sec.title}</h2>
-                        <table>
-                            <thead><tr><th>Дата / Время</th><th>Детали</th><th>Сумма</th><th style="width:40px;"></th></tr></thead>
-                            <tbody id="dyn-hist-${sec.id}"><tr><td colspan="4" style="text-align:center;">Пусто</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="card"><h2>${sec.title}</h2>${modeHtml}<button type="button" style="margin-top:15px;" onclick="addCustomSecRecord('${sec.id}')">${sec.btnText || 'Добавить запись'}</button></div>
+                    <div class="card"><h2>История: ${sec.title}</h2><table><thead><tr><th>Дата / Время</th><th>Детали</th><th>Сумма</th><th style="width:40px;"></th></tr></thead><tbody id="dyn-hist-${sec.id}"><tr><td colspan="4" style="text-align:center;">Пусто</td></tr></tbody></table></div>
                 `;
 
                 if (isFarm) {
-                    let b = document.createElement('button');
-                    b.type = 'button';
-                    b.className = 'sub-btn farm-sub dyn-generated';
+                    let b = Object.assign(document.createElement('button'), { type: 'button', className: 'sub-btn farm-sub dyn-generated', textContent: sec.title });
                     b.dataset.farmSub = sec.id;
-                    b.textContent = sec.title;
                     b.onclick = () => switchFarmSub(sec.id, sec.title);
                     farmLinks.appendChild(b);
 
-                    let contentDiv = document.createElement('div');
-                    contentDiv.id = 'farm-sub-' + sec.id;
-                    contentDiv.className = 'farm-content dyn-generated';
-                    contentDiv.innerHTML = innerBlock;
-                    farmTab.appendChild(contentDiv);
+                    let div = Object.assign(document.createElement('div'), { id: 'farm-sub-' + sec.id, className: 'farm-content dyn-generated', innerHTML: innerBlock });
+                    farmTab.appendChild(div);
                 } else {
-                    let a = document.createElement('a');
-                    a.href = '/' + sec.id;
-                    a.className = 'nav-btn dyn-generated';
+                    let a = Object.assign(document.createElement('a'), { href: '/' + sec.id, className: 'nav-btn dyn-generated', textContent: sec.title });
                     a.dataset.tab = sec.id;
-                    a.textContent = sec.title;
                     a.onclick = (e) => { e.preventDefault(); switchTab(sec.id, true); };
                     navTabs.insertBefore(a, adminNavBtn);
 
-                    let tabDiv = document.createElement('div');
-                    tabDiv.id = 'tab-' + sec.id;
-                    tabDiv.className = 'tab-content dyn-generated';
-                    tabDiv.innerHTML = innerBlock;
-                    mainContainer.insertBefore(tabDiv, ratingTab);
+                    let div = Object.assign(document.createElement('div'), { id: 'tab-' + sec.id, className: 'tab-content dyn-generated', innerHTML: innerBlock });
+                    mainContainer.insertBefore(div, ratingTab);
                 }
 
-                let rCard = document.createElement('div');
-                rCard.className = 'card dyn-generated';
-                rCard.innerHTML = `
-                    <h2>${sec.title} — Рейтинг</h2>
-                    <table>
-                        <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th class="dyn-period-col-cnt">Кол-во за период</th><th class="dyn-period-col-earn">Заработано за период</th><th>За всё время</th></tr></thead>
-                        <tbody id="dyn-rating-${sec.id}"><tr><td colspan="4" style="text-align:center;">Нет данных</td></tr></tbody>
-                    </table>
-                `;
+                let rCard = Object.assign(document.createElement('div'), {
+                    className: 'card dyn-generated',
+                    innerHTML: `<h2>${sec.title} — Рейтинг</h2><table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th class="dyn-period-col-cnt">Кол-во за период</th><th class="dyn-period-col-earn">Заработано за период</th><th>За всё время</th></tr></thead><tbody id="dyn-rating-${sec.id}"><tr><td colspan="4" style="text-align:center;">Нет данных</td></tr></tbody></table>`
+                });
                 ratingTab.appendChild(rCard);
             });
             if (allUsersCache.length > 0) renderRatings(allUsersCache);
@@ -647,27 +519,19 @@
                 if (amount <= 0) return showToast("Введите корректную сумму!", "error");
                 details = "Разовая выплата";
                 $(`dyn-amount-${secId}`).value = sec.defaultPrice > 0 ? fmt(sec.defaultPrice) : "";
-            } else if (sec.mode === 'count_custom') {
+            } else {
                 count = parseInt($(`dyn-count-${secId}`).value) || 0;
-                let price = getCleanNumber(`dyn-price-${secId}`);
-                if (count <= 0 || price <= 0) return showToast("Введите количество и цену!", "error");
-                amount = count * price;
-                details = `${count} ед. × ${fmt(price)} ₽`;
-                $(`dyn-count-${secId}`).value = "";
-            } else if (sec.mode === 'count_fixed') {
-                count = parseInt($(`dyn-count-${secId}`).value) || 0;
-                let price = Number(sec.defaultPrice) || 0;
-                if (count <= 0) return showToast("Введите количество!", "error");
+                let price = sec.mode === 'count_fixed' ? (Number(sec.defaultPrice) || 0) : getCleanNumber(`dyn-price-${secId}`);
+                if (count <= 0 || price <= 0) return showToast("Введите корректные данные!", "error");
                 amount = count * price;
                 details = `${count} ед. × ${fmt(price)} ₽`;
                 $(`dyn-count-${secId}`).value = "";
             }
 
-            if (!userData.customRecords) userData.customRecords = {};
-            if (!userData.customRecords[secId]) userData.customRecords[secId] = [];
+            userData.customRecords = userData.customRecords || {};
+            userData.customRecords[secId] = userData.customRecords[secId] || [];
             let { shortTime: time, date } = getMskNow();
             userData.customRecords[secId].unshift({ id: Date.now(), count, amount, details, time, date });
-
             await commitChange(`${sec.title}: +${fmt(amount)} ₽`, "success", true, `Запись в «${sec.title}»`, `${details} (+${fmt(amount)} ₽)`);
         };
 
@@ -691,11 +555,7 @@
                 if (b.dataset.adminSub === 'logs' || b.dataset.adminSub === 'subs') loadGlobalRatings();
             }));
 
-            window.addEventListener('popstate', () => {
-                let path = window.location.pathname.replace('/', '') || 'perekup';
-                switchTab(path, false);
-            });
-
+            window.addEventListener('popstate', () => switchTab(window.location.pathname.replace('/', '') || 'perekup', false));
             let initialPath = window.location.pathname.replace('/', '');
             switchTab(['perekup', 'farm', 'casino', 'debts', 'rating', 'admin'].includes(initialPath) ? initialPath : 'perekup', false);
 
@@ -705,19 +565,19 @@
             $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
             $('admin-level-picker').addEventListener('change', renderAdminCarsList);
 
-            ['ledger-status-filter', 'ledger-sort', 'ledger-limit'].forEach(id => {
-                $(id)?.addEventListener('change', () => { ledgerPage = 1; renderResellerLedger(); });
-            });
+            // Фильтры пользователей в админке
+            $('admin-users-status-filter')?.addEventListener('change', renderAdminUsersProfiles);
+            $('admin-users-search')?.addEventListener('input', renderAdminUsersProfiles);
+
+            // Фильтры Торговой тетради
+            ['ledger-status-filter', 'ledger-sort', 'ledger-limit'].forEach(id => $(id)?.addEventListener('change', () => { ledgerPage = 1; renderResellerLedger(); }));
             $('ledger-search')?.addEventListener('input', () => { ledgerPage = 1; renderResellerLedger(); });
 
-            ['admin-log-user-filter', 'admin-log-type-filter', 'admin-log-sort', 'admin-log-limit'].forEach(id => {
-                $(id)?.addEventListener('change', () => { adminLogsPage = 1; renderAdminLogs(); });
-            });
+            // Фильтры Логов
+            ['admin-log-user-filter', 'admin-log-type-filter', 'admin-log-sort', 'admin-log-limit'].forEach(id => $(id)?.addEventListener('change', () => { adminLogsPage = 1; renderAdminLogs(); }));
             $('admin-log-search')?.addEventListener('input', () => { adminLogsPage = 1; renderAdminLogs(); });
 
-            document.querySelectorAll('#tab-perekup .sub-btn').forEach(a => {
-                a.addEventListener('click', () => logAction("Переход в подраздел Перекупа", a.textContent.trim()));
-            });
+            document.querySelectorAll('#tab-perekup .sub-btn').forEach(a => a.addEventListener('click', () => logAction("Переход в подраздел Перекупа", a.textContent.trim())));
 
             const clicks = {
                 'btn-login': () => authAction(false),
@@ -735,6 +595,8 @@
                 'btn-save-house': finishHouse,
                 'btn-cancel-house': cancelHouse,
                 'btn-add-allowed': addAllowedUser,
+                'btn-bulk-selected': () => bulkGrantSubscription(false),
+                'btn-bulk-all': () => bulkGrantSubscription(true),
                 'btn-add-reseller-item': addResellerItem,
                 'btn-add-dice': addDiceGame,
                 'btn-add-debt': addDebtRecord,
@@ -762,11 +624,10 @@
 
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
-                    // Если сейчас идет подача новой заявки на регистрацию — ждем сохранения данных заявки и выходим
                     if (isProcessingRegistration) return;
-
                     isUserDataLoaded = false;
                     currentLogin = user.email.split('@')[0];
+
                     if (currentLogin !== ADMIN_LOGIN) {
                         let snap = await getDoc(doc(db, "system", "config"));
                         let cfgData = snap.exists() ? snap.data() : {};
@@ -774,11 +635,7 @@
                         let isPending = Boolean(cfgData.pendingRequestsMap?.[currentLogin]);
 
                         if (!userExpiryTime || Date.now() > userExpiryTime) {
-                            if (isPending) {
-                                showToast("⏳ Ваша заявка на рассмотрении! Дождитесь одобрения администратора.", "error");
-                            } else {
-                                showToast("Срок действия подписки истек или заявка отклонена!", "error");
-                            }
+                            showToast(isPending ? "⏳ Ваша заявка на рассмотрении! Дождитесь одобрения администратора." : "Срок действия подписки истек или заявка отклонена!", "error");
                             return signOut(auth);
                         }
                     } else userExpiryTime = Date.now() + 31536000000;
@@ -832,15 +689,26 @@
                     if (myIdx >= 0) all[myIdx] = { ...all[myIdx], ...mergedMe };
                     else all.push(mergedMe);
                 }
-
                 allUsersCache = all;
 
                 try {
                     let cSnap = await getDoc(doc(db, "system", "config"));
                     let cData = cSnap.exists() ? cSnap.data() : {};
-                    allowedUsersMapCache = cData.allowedUsersMap || {};
-                    pendingRequestsMapCache = cData.pendingRequestsMap || {};
+                    allowedUsersMapCache = { ...(cData.allowedUsersMap || {}) };
+                    pendingRequestsMapCache = { ...(cData.pendingRequestsMap || {}) };
                     openRegistrationEnabled = Boolean(cData.openRegistration);
+
+                    // Авто-очистка зависших заявок, которым ранее уже была выдана активная подписка
+                    if (currentLogin === ADMIN_LOGIN) {
+                        let cleaned = false;
+                        Object.keys(pendingRequestsMapCache).forEach(l => {
+                            if (allowedUsersMapCache[l] && allowedUsersMapCache[l] > Date.now()) {
+                                delete pendingRequestsMapCache[l];
+                                cleaned = true;
+                            }
+                        });
+                        if (cleaned) await updateSystemConfigMaps({ pendingRequestsMap: pendingRequestsMapCache });
+                    }
                 } catch (e) {
                     allowedUsersMapCache = {};
                     pendingRequestsMapCache = {};
@@ -862,17 +730,16 @@
         }
 
         function renderRatings(list) {
-            let pLabel = formatPeriodLabel(ratingPeriod, ratingCustomDate);
+            let pLabel = formatPeriodLabel('rating');
 
-            const headersMap = {
+            Object.entries({
                 'th-theft-cnt': `Машин (${pLabel})`, 'th-theft-earn': `Заработано (${pLabel})`,
                 'th-courier-cnt': `Закладок (${pLabel})`, 'th-courier-earn': `Заработано (${pLabel})`,
                 'th-house-cnt': `Ограблений (${pLabel})`, 'th-house-earn': `Заработано (${pLabel})`,
                 'th-reseller-rev': `Выручка (${pLabel})`, 'th-reseller-prof': `Чистая прибыль (${pLabel})`,
                 'th-casino-win': `Выиграно (${pLabel})`, 'th-casino-lose': `Проиграно (${pLabel})`, 'th-casino-net': `Баланс (${pLabel})`,
                 'th-debts-owe': `Должен (${pLabel})`, 'th-debts-oweme': `Должны ему (${pLabel})`, 'th-debts-net': `Баланс (${pLabel})`
-            };
-            Object.entries(headersMap).forEach(([id, text]) => { if ($(id)) $(id).textContent = text; });
+            }).forEach(([id, text]) => { if ($(id)) $(id).textContent = text; });
 
             document.querySelectorAll('.dyn-period-col-cnt').forEach(el => el.textContent = `Кол-во (${pLabel})`);
             document.querySelectorAll('.dyn-period-col-earn').forEach(el => el.textContent = `Заработано (${pLabel})`);
@@ -890,7 +757,7 @@
                         if (u.charName) theft[l].pubName = pubName;
                         let pr = Number(x.price) || 0;
                         theft[l].tc++; theft[l].te += pr;
-                        if (isRecordInRatingPeriod(x.date, x.id)) { theft[l].c++; theft[l].e += pr; }
+                        if (checkDateInPeriod(x.date, x.id, 'rating')) { theft[l].c++; theft[l].e += pr; }
                     }
                 });
 
@@ -899,7 +766,7 @@
                     if (u.charName) courier[l].pubName = pubName;
                     let cnt = Number(x.count) || 0, earn = Number(x.earned) || 0;
                     courier[l].tc += cnt; courier[l].te += earn;
-                    if (isRecordInRatingPeriod(x.date, x.id)) { courier[l].c += cnt; courier[l].e += earn; }
+                    if (checkDateInPeriod(x.date, x.id, 'rating')) { courier[l].c += cnt; courier[l].e += earn; }
                 });
 
                 u.houseHistory?.forEach(x => {
@@ -907,7 +774,7 @@
                     if (u.charName) house[l].pubName = pubName;
                     let amt = Number(x.amount) || 0;
                     house[l].tc++; house[l].te += amt;
-                    if (isRecordInRatingPeriod(x.date, x.id)) { house[l].c++; house[l].e += amt; }
+                    if (checkDateInPeriod(x.date, x.id, 'rating')) { house[l].c++; house[l].e += amt; }
                 });
 
                 u.resellerItems?.forEach(x => {
@@ -916,16 +783,15 @@
                         if (u.charName) reseller[l].pubName = pubName;
                         let p = (Number(x.sellPrice) || 0) - (Number(x.buyPrice) || 0);
                         reseller[l].tp += p;
-                        if (isRecordInRatingPeriod(null, x.soldTime || x.startTime || x.id)) {
-                            reseller[l].p += p;
-                            reseller[l].rev += (Number(x.sellPrice) || 0);
+                        if (checkDateInPeriod(null, x.soldTime || x.startTime || x.id, 'rating')) {
+                            reseller[l].p += p; reseller[l].rev += (Number(x.sellPrice) || 0);
                             reseller[l].items.push({ name: x.name, buy: x.buyPrice, sell: x.sellPrice, p });
                         }
                     }
                 });
 
                 u.diceHistory?.forEach(x => {
-                    if (isRecordInRatingPeriod(x.date, x.id)) {
+                    if (checkDateInPeriod(x.date, x.id, 'rating')) {
                         casino[l] = casino[l] || { pubName, w: 0, l: 0, net: 0 };
                         if (u.charName) casino[l].pubName = pubName;
                         let amt = Number(x.amount) || 0;
@@ -935,7 +801,7 @@
                 });
 
                 u.debts?.forEach(x => {
-                    if (isRecordInRatingPeriod(x.date, x.id)) {
+                    if (checkDateInPeriod(x.date, x.id, 'rating')) {
                         debts[l] = debts[l] || { pubName, iOwe: 0, owesMe: 0, net: 0 };
                         if (u.charName) debts[l].pubName = pubName;
                         let amt = Number(x.amount) || 0;
@@ -951,12 +817,8 @@
                             customMap[secId][l] = customMap[secId][l] || { pubName, c: 0, e: 0, tc: 0, te: 0 };
                             if (u.charName) customMap[secId][l].pubName = pubName;
                             let cnt = Number(r.count) || 1, amt = Number(r.amount) || 0;
-                            customMap[secId][l].tc += cnt;
-                            customMap[secId][l].te += amt;
-                            if (isRecordInRatingPeriod(r.date, r.id)) {
-                                customMap[secId][l].c += cnt;
-                                customMap[secId][l].e += amt;
-                            }
+                            customMap[secId][l].tc += cnt; customMap[secId][l].te += amt;
+                            if (checkDateInPeriod(r.date, r.id, 'rating')) { customMap[secId][l].c += cnt; customMap[secId][l].e += amt; }
                         });
                     });
                 }
@@ -964,13 +826,8 @@
 
             const fillTable = (id, data, sortKey, secondaryKey, rowBuilder, hideZeroInCustom = false) => {
                 let arr = Object.keys(data || {}).map(login => ({ login, ...data[login] }));
-                if (hideZeroInCustom && ratingPeriod === 'custom') {
-                    arr = arr.filter(x => x.c > 0 || x.p !== 0 || x.rev > 0);
-                }
-                arr.sort((a, b) => {
-                    if (b[sortKey] !== a[sortKey]) return b[sortKey] - a[sortKey];
-                    return (b[secondaryKey] || 0) - (a[secondaryKey] || 0);
-                });
+                if (hideZeroInCustom && periods.rating.mode === 'custom') arr = arr.filter(x => x.c > 0 || x.p !== 0 || x.rev > 0);
+                arr.sort((a, b) => (b[sortKey] !== a[sortKey]) ? (b[sortKey] - a[sortKey]) : ((b[secondaryKey] || 0) - (a[secondaryKey] || 0)));
                 renderList(id, arr, `Нет данных (${pLabel})`, 4, rowBuilder);
             };
 
@@ -985,29 +842,25 @@
             fillTable('rating-debts-list', debts, 'net', 'owesMe', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td style="color:var(--danger);">${fmt(i.iOwe)} ₽</td><td style="color:var(--success);">${fmt(i.owesMe)} ₽</td><td style="color:${i.net >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${fmt(i.net)} ₽</td></tr>`);
 
             (siteConfig.customSections || []).forEach(sec => {
-                fillTable(`dyn-rating-${sec.id}`, customMap[sec.id] || {}, 'e', 'te', (i, idx) => `
-                    <tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} (${i.tc} всего)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>
-                `, true);
+                fillTable(`dyn-rating-${sec.id}`, customMap[sec.id] || {}, 'e', 'te', (i, idx) => `<tr><td>#${idx + 1} ${i.pubName}</td><td>${i.c} (${i.tc} всего)</td><td style="color:var(--success);font-weight:bold;">${fmt(i.e)} ₽</td><td>${fmt(i.te)} ₽</td></tr>`, true);
             });
         }
 
-        // ==================== АДМИН-РЕДАКТОР ЗАЯВОК, ПОДПИСОК И ПРОФИЛЕЙ ====================
+        // ==================== АДМИН-РЕДАКТОР ЗАЯВОК, МАССОВЫХ ПОДПИСОК И ПРОФИЛЕЙ ====================
         window.toggleOpenRegistration = async function(cb) {
             openRegistrationEnabled = cb.checked;
             try {
-                await setDoc(doc(db, "system", "config"), { openRegistration: openRegistrationEnabled }, { merge: true });
-                showToast(openRegistrationEnabled ? "🔓 Подача заявок на регистрацию ОТКРЫТА!" : "🔒 Регистрация переведена в закрытый режим (только по выданным логинам).");
+                await updateSystemConfigMaps({ openRegistration: openRegistrationEnabled });
+                showToast(openRegistrationEnabled ? "🔓 Подача заявок на регистрацию ОТКРЫТА!" : "🔒 Регистрация переведена в закрытый режим.");
             } catch (e) { showToast("Ошибка: " + e.message, "error"); }
         };
 
-        // Отрисовка входящих заявок на регистрацию с кнопками Одобрить / Отклонить
         function renderPendingRequestsList() {
             if ($('adm-open-reg-toggle')) $('adm-open-reg-toggle').checked = openRegistrationEnabled;
 
             let keys = Object.keys(pendingRequestsMapCache || {});
             let reqArr = keys.map(login => ({ login, ...pendingRequestsMapCache[login] })).sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0));
 
-            // Счетчик заявок на кнопке Админ-панели
             let navAdm = $('nav-admin');
             if (navAdm) {
                 navAdm.innerHTML = reqArr.length > 0
@@ -1019,7 +872,7 @@
                 <tr>
                     <td><strong style="color:var(--accent);">${r.login}</strong><br><small style="color:var(--text-muted);">${formatTsDateTime(r.requestedAt)}</small></td>
                     <td><strong>${r.charName || '—'}</strong> ${r.staticId ? `<span class="static-badge">#${r.staticId}</span>` : ''}</td>
-                    <td><input type="number" class="inline-input" id="req-days-${idx}" value="3" step="0.5" min="0.5" style="width:90px;" title="На сколько дней выдать доступ"></td>
+                    <td><input type="number" class="inline-input" id="req-days-${idx}" value="3" step="0.5" min="0.5" style="width:90px;"></td>
                     <td style="text-align:right;white-space:nowrap;">
                         <button type="button" class="success-btn" style="width:auto;padding:7px 12px;font-size:0.82rem;margin:0;" onclick="approveRegistrationRequest('${r.login}', ${idx})">✅ Одобрить</button>
                         <button type="button" class="danger" style="width:auto;padding:7px 12px;font-size:0.82rem;margin:0 0 0 6px;" onclick="rejectRegistrationRequest('${r.login}', '${r.uid || ''}')">❌ Отклонить</button>
@@ -1031,7 +884,7 @@
         window.approveRegistrationRequest = async function(login, idx) {
             let days = parseFloat($(`req-days-${idx}`)?.value) || 3;
             try {
-                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                let snap = await getDoc(doc(db, "system", "config"));
                 let data = snap.exists() ? snap.data() : {};
                 let allowedMap = { ...(data.allowedUsersMap || {}) };
                 let pendingMap = { ...(data.pendingRequestsMap || {}) };
@@ -1040,31 +893,36 @@
                 allowedMap[login] = Date.now() + (days * 86400000);
                 delete pendingMap[login];
 
-                await setDoc(ref, { allowedUsersMap: allowedMap, pendingRequestsMap: pendingMap }, { merge: true });
+                // Мгновенно обновляем локальный кэш и интерфейс
+                allowedUsersMapCache = allowedMap;
+                pendingRequestsMapCache = pendingMap;
+                renderPendingRequestsList();
+                renderAllowedUsersList();
+                renderAdminUsersProfiles();
 
-                if (reqInfo?.uid) {
-                    await setDoc(doc(db, "users", reqInfo.uid), { status: "approved" }, { merge: true });
-                }
+                await updateSystemConfigMaps({ allowedUsersMap: allowedMap, pendingRequestsMap: pendingMap });
+                if (reqInfo?.uid) await setDoc(doc(db, "users", reqInfo.uid), { status: "approved" }, { merge: true });
 
-                await loadGlobalRatings();
                 showToast(`Заявка «${login}» одобрена на ${days} дн.!`);
+                loadGlobalRatings();
             } catch (e) { showToast("Ошибка: " + e.message, "error"); }
         };
 
         window.rejectRegistrationRequest = async function(login, uid) {
             if (!confirm(`Отклонить заявку игрока «${login}»?`)) return;
             try {
-                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
-                if (snap.exists()) {
-                    let pendingMap = { ...(snap.data().pendingRequestsMap || {}) };
-                    delete pendingMap[login];
-                    await setDoc(ref, { pendingRequestsMap: pendingMap }, { merge: true });
-                }
-                if (uid) {
-                    try { await deleteDoc(doc(db, "users", uid)); } catch (e) {}
-                }
-                await loadGlobalRatings();
+                let snap = await getDoc(doc(db, "system", "config"));
+                let pendingMap = snap.exists() ? { ...(snap.data().pendingRequestsMap || {}) } : {};
+                delete pendingMap[login];
+
+                pendingRequestsMapCache = pendingMap;
+                renderPendingRequestsList();
+
+                await updateSystemConfigMaps({ pendingRequestsMap: pendingMap });
+                if (uid) { try { await deleteDoc(doc(db, "users", uid)); } catch (e) {} }
+
                 showToast(`Заявка «${login}» отклонена и удалена!`, "error");
+                loadGlobalRatings();
             } catch (e) { showToast("Ошибка: " + e.message, "error"); }
         };
 
@@ -1089,25 +947,119 @@
             `);
         }
 
-        function renderAdminUsersProfiles() {
-            let sorted = [...allUsersCache].map(u => {
-                let diff = getRemainingDiffForLogin(u.login);
-                let remDays = u.login === ADMIN_LOGIN ? 999 : (allowedUsersMapCache[u.login] ? Math.max(0, Math.round((diff / 86400000) * 10) / 10) : 0);
-                return { ...u, diff, remDays };
-            }).sort((a, b) => b.diff - a.diff);
+        function getFilteredAdminUsers() {
+            let statusFilter = $('admin-users-status-filter')?.value || 'all';
+            let search = ($('admin-users-search')?.value || '').trim().toLowerCase();
 
-            renderList('admin-users-profiles-list', sorted, "Нет зарегистрированных пользователей", 6, (u, idx) => {
+            return allUsersCache.map(u => {
+                let diff = getRemainingDiffForLogin(u.login);
                 let isAdm = u.login === ADMIN_LOGIN;
                 let isPend = Boolean(pendingRequestsMapCache[u.login]);
-                let subStatusHtml = isAdm
+                let isActive = isAdm || diff > 0;
+                let remDays = isAdm ? 999 : (allowedUsersMapCache[u.login] ? Math.max(0, Math.round((diff / 86400000) * 10) / 10) : 0);
+                return { ...u, diff, isAdm, isPend, isActive, remDays };
+            }).filter(u => {
+                if (statusFilter === 'active' && !u.isActive) return false;
+                if (statusFilter === 'expired' && (u.isActive || u.isPend)) return false;
+                if (statusFilter === 'pending' && !u.isPend) return false;
+                if (search) {
+                    let hay = `${u.login || ''} ${u.charName || ''} ${u.staticId || ''}`.toLowerCase();
+                    if (!hay.includes(search)) return false;
+                }
+                return true;
+            }).sort((a, b) => b.diff - a.diff);
+        }
+
+        function updateBulkSelectedCount() {
+            let btn = $('btn-bulk-selected');
+            if (btn) btn.textContent = `✅ Выдать выбранным (${selectedAdminUsers.size})`;
+        }
+
+        window.toggleUserSelect = function(login, checked) {
+            if (checked) selectedAdminUsers.add(login);
+            else selectedAdminUsers.delete(login);
+            updateBulkSelectedCount();
+        };
+
+        window.toggleSelectAllFilteredUsers = function(cb) {
+            let visible = getFilteredAdminUsers().filter(u => !u.isAdm);
+            visible.forEach(u => {
+                if (cb.checked) selectedAdminUsers.add(u.login);
+                else selectedAdminUsers.delete(u.login);
+            });
+            renderAdminUsersProfiles();
+        };
+
+        // Массовая выдача подписки выбранным или сразу всем зарегистрированным игрокам
+        async function bulkGrantSubscription(targetAll = false) {
+            let days = parseFloat($('bulk-sub-days')?.value);
+            let mode = $('bulk-sub-mode')?.value || 'add';
+            if (isNaN(days) || days <= 0) return showToast("Введите корректное количество дней!", "error");
+
+            let targets = targetAll
+                ? allUsersCache.filter(u => u.login && u.login !== ADMIN_LOGIN).map(u => u.login)
+                : [...selectedAdminUsers].filter(l => l && l !== ADMIN_LOGIN);
+            targets = [...new Set(targets)];
+
+            if (!targets.length) return showToast("Выберите хотя бы одного игрока галочкой!", "error");
+
+            let modeText = mode === 'add' ? `добавить +${days} дн.` : `установить ровно ${days} дн. от сегодня`;
+            let scopeText = targetAll ? `ВСЕМ зарегистрированным игрокам (${targets.length} чел.)` : `выбранным игрокам (${targets.length} чел.)`;
+            if (!confirm(`Вы уверены, что хотите ${modeText} для ${scopeText}?`)) return;
+
+            try {
+                let snap = await getDoc(doc(db, "system", "config"));
+                let data = snap.exists() ? snap.data() : {};
+                let allowedMap = { ...(data.allowedUsersMap || {}) };
+                let pendingMap = { ...(data.pendingRequestsMap || {}) };
+                let now = Date.now(), addMs = days * 86400000;
+
+                targets.forEach(login => {
+                    if (mode === 'add') {
+                        let base = Math.max(now, allowedMap[login] || 0);
+                        allowedMap[login] = base + addMs;
+                    } else {
+                        allowedMap[login] = now + addMs;
+                    }
+                    delete pendingMap[login];
+                });
+
+                allowedUsersMapCache = allowedMap;
+                pendingRequestsMapCache = pendingMap;
+                selectedAdminUsers.clear();
+
+                await updateSystemConfigMaps({ allowedUsersMap: allowedMap, pendingRequestsMap: pendingMap });
+                await loadGlobalRatings();
+                showToast(`Подписка успешно обновлена для ${targets.length} игроков!`);
+            } catch (e) { showToast("Ошибка массовой выдачи: " + e.message, "error"); }
+        }
+
+        function renderAdminUsersProfiles() {
+            let filtered = getFilteredAdminUsers();
+            let nonAdmFiltered = filtered.filter(u => !u.isAdm);
+            let allChecked = nonAdmFiltered.length > 0 && nonAdmFiltered.every(u => selectedAdminUsers.has(u.login));
+            if ($('admin-users-select-all')) $('admin-users-select-all').checked = allChecked;
+            updateBulkSelectedCount();
+
+            if ($('admin-users-count-badge')) {
+                let activeCnt = allUsersCache.filter(u => u.login === ADMIN_LOGIN || getRemainingDiffForLogin(u.login) > 0).length;
+                let expiredCnt = allUsersCache.length - activeCnt;
+                $('admin-users-count-badge').textContent = `Показано: ${filtered.length} | Всего: ${allUsersCache.length} (Активных: ${activeCnt}, Закончилась: ${expiredCnt})`;
+            }
+
+            renderList('admin-users-profiles-list', filtered, "Игроков по этому фильтру не найдено", 6, (u, idx) => {
+                let subStatusHtml = u.isAdm
                     ? `<span style="color:var(--accent);font-weight:bold;">Безлимит (Админ)</span>`
-                    : `<span style="color:${u.diff > 0 ? 'var(--success)' : (isPend ? 'var(--accent)' : 'var(--danger)')};font-weight:bold;display:block;font-size:0.8rem;margin-bottom:4px;">${u.diff > 0 ? formatTime(u.diff) : (isPend ? '⏳ Ждет одобрения' : 'Нет / Истекла')}</span>
+                    : `<span style="color:${u.isActive ? 'var(--success)' : (u.isPend ? 'var(--accent)' : 'var(--danger)')};font-weight:bold;display:block;font-size:0.8rem;margin-bottom:4px;">${u.isActive ? formatTime(u.diff) : (u.isPend ? '⏳ Ждет одобрения' : 'Нет / Истекла')}</span>
                        <input type="number" class="inline-input" id="adm-prof-days-${idx}" value="${u.remDays}" step="0.5" min="0" placeholder="Дней">`;
 
                 return `
                     <tr>
+                        <td style="text-align:center;">
+                            ${!u.isAdm ? `<input type="checkbox" class="row-check" ${selectedAdminUsers.has(u.login) ? 'checked' : ''} onchange="toggleUserSelect('${u.login}', this.checked)">` : ''}
+                        </td>
                         <td>
-                            <input type="text" class="inline-input" id="adm-prof-login-${idx}" value="${u.login || ''}" ${isAdm ? 'disabled' : ''} placeholder="Логин">
+                            <input type="text" class="inline-input" id="adm-prof-login-${idx}" value="${u.login || ''}" ${u.isAdm ? 'disabled' : ''} placeholder="Логин">
                             <div style="font-size:0.78rem;margin-top:3px;">${formatBracketProfile(u)}</div>
                         </td>
                         <td><input type="text" class="inline-input" id="adm-prof-name-${idx}" value="${u.charName || ''}" placeholder="Имя Фамилия"></td>
@@ -1115,7 +1067,7 @@
                         <td>${subStatusHtml}</td>
                         <td style="text-align:right;white-space:nowrap;">
                             <button type="button" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0;" onclick="adminSaveUserProfile('${u.uid}', '${u.login}', ${idx})">💾</button>
-                            ${!isAdm ? `<button type="button" class="danger" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0 0 0 6px;" onclick="adminDeleteUserProfile('${u.uid}', '${u.login}')">🗑</button>` : ''}
+                            ${!u.isAdm ? `<button type="button" class="danger" style="width:auto;padding:7px 11px;font-size:0.82rem;margin:0 0 0 6px;" onclick="adminDeleteUserProfile('${u.uid}', '${u.login}')">🗑</button>` : ''}
                         </td>
                     </tr>
                 `;
@@ -1132,7 +1084,7 @@
             try {
                 await setDoc(doc(db, "users", uid), { login: newLogin, charName, staticId }, { merge: true });
                 if (oldLogin !== ADMIN_LOGIN) {
-                    let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                    let snap = await getDoc(doc(db, "system", "config"));
                     let data = snap.exists() ? snap.data() : {};
                     let map = { ...(data.allowedUsersMap || {}) };
                     let pendingMap = { ...(data.pendingRequestsMap || {}) };
@@ -1140,6 +1092,7 @@
                     if (newLogin !== oldLogin) {
                         if (map[oldLogin] && !map[newLogin]) map[newLogin] = map[oldLogin];
                         delete map[oldLogin];
+                        delete pendingMap[oldLogin];
                     }
                     if (daysInput) {
                         let dVal = parseFloat(daysInput.value);
@@ -1150,7 +1103,7 @@
                             } else delete map[newLogin];
                         }
                     }
-                    await setDoc(ref, { allowedUsersMap: map, pendingRequestsMap: pendingMap }, { merge: true });
+                    await updateSystemConfigMaps({ allowedUsersMap: map, pendingRequestsMap: pendingMap });
                 }
                 if (currentUser && currentUser.uid === uid) {
                     userData.charName = charName;
@@ -1166,14 +1119,15 @@
             if (!confirm(`Полностью удалить пользователя «${login}», его данные и подписку?`)) return;
             try {
                 if (uid) await deleteDoc(doc(db, "users", uid));
-                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                let snap = await getDoc(doc(db, "system", "config"));
                 if (snap.exists()) {
                     let map = { ...(snap.data().allowedUsersMap || {}) };
                     let pMap = { ...(snap.data().pendingRequestsMap || {}) };
                     delete map[login];
                     delete pMap[login];
-                    await setDoc(ref, { allowedUsersMap: map, pendingRequestsMap: pMap }, { merge: true });
+                    await updateSystemConfigMaps({ allowedUsersMap: map, pendingRequestsMap: pMap });
                 }
+                selectedAdminUsers.delete(login);
                 await loadGlobalRatings();
                 showToast(`Профиль и подписка «${login}» удалены!`, "error");
             } catch (e) { showToast("Ошибка удаления: " + e.message, "error"); }
@@ -1215,7 +1169,7 @@
             let arr = siteConfig.customSections || [];
             renderList('admin-custom-sections-list', arr, "Кастомных разделов пока не создано", 5, (s, idx) => `
                 <tr>
-                    <td><input type="checkbox" ${s.enabled !== false ? 'checked' : ''} style="width:18px;height:18px;margin:0;" onchange="adminToggleCustomSec(${idx}, this.checked)"></td>
+                    <td><input type="checkbox" class="row-check" ${s.enabled !== false ? 'checked' : ''} onchange="adminToggleCustomSec(${idx}, this.checked)"></td>
                     <td><input type="text" class="inline-input" id="adm-csec-title-${idx}" value="${s.title}"></td>
                     <td>${s.placement === 'farm' ? 'Подраздел Фарма' : 'Главное меню'}</td>
                     <td><input type="number" class="inline-input" id="adm-csec-price-${idx}" value="${s.defaultPrice || 0}"></td>
@@ -1229,17 +1183,17 @@
 
         async function adminCreateCustomSection() {
             let title = $('adm-new-sec-title').value.trim();
-            let placement = $('adm-new-sec-place').value;
-            let mode = $('adm-new-sec-mode').value;
-            let defaultPrice = getCleanNumber('adm-new-sec-price');
-            let unitLabel = $('adm-new-sec-unit').value.trim() || "Количество";
-            let btnText = $('adm-new-sec-btn').value.trim() || "Добавить в учет";
-
             if (!title) return showToast("Введите название нового раздела!", "error");
-            let id = 'csec_' + Date.now();
             siteConfig.customSections = siteConfig.customSections || [];
-            siteConfig.customSections.push({ id, title, placement, mode, defaultPrice, unitLabel, btnText, enabled: true });
-
+            siteConfig.customSections.push({
+                id: 'csec_' + Date.now(), title,
+                placement: $('adm-new-sec-place').value,
+                mode: $('adm-new-sec-mode').value,
+                defaultPrice: getCleanNumber('adm-new-sec-price'),
+                unitLabel: $('adm-new-sec-unit').value.trim() || "Количество",
+                btnText: $('adm-new-sec-btn').value.trim() || "Добавить в учет",
+                enabled: true
+            });
             $('adm-new-sec-title').value = ""; $('adm-new-sec-price').value = "";
             await saveSiteConfigToDb(`Раздел «${title}» успешно создан!`);
         }
@@ -1266,8 +1220,7 @@
         };
 
         function renderAdminCarsList() {
-            let lvlKey = $('admin-level-picker').value;
-            let lvl = siteConfig.theftLevels[lvlKey];
+            let lvlKey = $('admin-level-picker').value, lvl = siteConfig.theftLevels[lvlKey];
             if (!lvl) return;
             $('admin-level-name').value = lvl.name;
             $('admin-level-mode').value = lvl.mode || 'list';
@@ -1322,10 +1275,8 @@
         }
 
         async function adminAddCarToLevel() {
-            let key = $('admin-level-picker').value;
-            let name = $('adm-new-car-name').value.trim();
-            let day = getCleanNumber('adm-new-car-day');
-            let night = getCleanNumber('adm-new-car-night');
+            let key = $('admin-level-picker').value, name = $('adm-new-car-name').value.trim();
+            let day = getCleanNumber('adm-new-car-day'), night = getCleanNumber('adm-new-car-night');
             if (!name || day <= 0 || night <= 0) return showToast("Заполните название, дневную и ночную цену!", "error");
 
             let cars = siteConfig.theftLevels[key].cars || [];
@@ -1339,8 +1290,7 @@
         }
 
         window.adminUpdateCar = async function(lvlKey, oldName, idx) {
-            let cars = siteConfig.theftLevels[lvlKey]?.cars || [];
-            let item = cars.find(c => c.name === oldName);
+            let item = (siteConfig.theftLevels[lvlKey]?.cars || []).find(c => c.name === oldName);
             if (!item) return;
             item.name = $(`adm-car-name-${idx}`).value.trim() || oldName;
             item.day = parseFloat($(`adm-car-day-${idx}`).value) || 0;
@@ -1387,11 +1337,7 @@
             let parts = dateStr.split('.');
             if (parts.length !== 3) return fallbackId || 0;
             let tParts = (timeStr && timeStr !== '—') ? timeStr.split(':') : ['00', '00', '00'];
-            let dt = new Date(
-                parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]),
-                parseInt(tParts[0] || 0), parseInt(tParts[1] || 0), parseInt(tParts[2] || 0)
-            );
-            return dt.getTime() || fallbackId || 0;
+            return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]), parseInt(tParts[0] || 0), parseInt(tParts[1] || 0), parseInt(tParts[2] || 0)).getTime() || fallbackId || 0;
         }
 
         function getLogCategory(action = "") {
@@ -1408,8 +1354,8 @@
             let filterSel = $('admin-log-user-filter'), prevUser = filterSel.value;
             filterSel.innerHTML = `<option value="all">👤 Все игроки (${allUsersCache.length})</option>`;
 
-            let logins = allUsersCache.map(u => u.login).filter(Boolean).sort();
-            [...new Set(logins)].forEach(l => {
+            let logins = [...new Set(allUsersCache.map(u => u.login).filter(Boolean))].sort();
+            logins.forEach(l => {
                 let uObj = allUsersCache.find(x => x.login === l);
                 let label = uObj?.charName ? `${l} (${uObj.charName}${uObj.staticId ? ' #' + uObj.staticId : ''})` : l;
                 filterSel.add(new Option(label, l));
@@ -1422,21 +1368,17 @@
             let pageSize = parseInt($('admin-log-limit')?.value) || 50;
             let searchQuery = ($('admin-log-search')?.value || '').trim().toLowerCase();
 
-            let combined = [];
-            let seenKeys = new Set();
+            let combined = [], seenKeys = new Set();
 
             const pushUnique = (login, rawId, date, time, action, details, catOverride = "") => {
                 if (!login || (selectedUser !== 'all' && login !== selectedUser)) return;
                 let cat = catOverride || getLogCategory(action);
-
                 if (selectedType === 'operations' && cat === 'nav') return;
                 if (selectedType !== 'all' && selectedType !== 'operations' && cat !== selectedType) return;
 
                 let uObj = allUsersCache.find(x => x.login === login);
-                let charStr = uObj?.charName ? `${uObj.charName} #${uObj.staticId || ''}` : '';
-
                 if (searchQuery) {
-                    let hay = `${login} ${charStr} ${date} ${time} ${action} ${details}`.toLowerCase();
+                    let hay = `${login} ${uObj?.charName || ''} ${uObj?.staticId || ''} ${date} ${time} ${action} ${details}`.toLowerCase();
                     if (!hay.includes(searchQuery)) return;
                 }
 
@@ -1444,8 +1386,7 @@
                 if (seenKeys.has(key)) return;
                 seenKeys.add(key);
 
-                let ts = parseRuDateTime(date, time, rawId);
-                combined.push({ login, bracket: formatBracketProfile(uObj), ts, date: date || '—', time: time || '—', action, details, cat });
+                combined.push({ login, bracket: formatBracketProfile(uObj), ts: parseRuDateTime(date, time, rawId), date: date || '—', time: time || '—', action, details, cat });
             };
 
             (globalLogsCache || []).forEach(g => pushUnique(g.login, g.id, g.date, g.time, g.action, g.details));
@@ -1453,71 +1394,25 @@
             allUsersCache.forEach(u => {
                 let l = u.login;
                 if (!l || (selectedUser !== 'all' && l !== selectedUser)) return;
-
                 (u.activityLogs || []).forEach(entry => pushUnique(l, entry.id, entry.date, entry.time, entry.action, entry.details));
 
                 if (u.activeTheft) {
                     let stDate = new Date(u.activeTheft.startTime);
-                    pushUnique(
-                        l, u.activeTheft.startTime,
-                        stDate.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }),
-                        stDate.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }),
-                        "🚨 В процессе угона",
-                        `${u.activeTheft.carName} (${u.activeTheft.level} ур.)`,
-                        'theft'
-                    );
+                    pushUnique(l, u.activeTheft.startTime, stDate.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }), stDate.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }), "🚨 В процессе угона", `${u.activeTheft.carName} (${u.activeTheft.level} ур.)`, 'theft');
                 }
-
-                (u.history || []).forEach(h => {
-                    pushUnique(
-                        l, h.id || 0, h.date, h.time,
-                        h.status === 'caught' ? "🚓 Провал угона (полиция)" : "🚗 Сдача авто (Угонщик)",
-                        `${h.name}: ${h.status === 'caught' ? '0 ₽' : '+' + fmt(h.price) + ' ₽'} (${h.duration || '—'})`,
-                        'theft'
-                    );
-                });
-
+                (u.history || []).forEach(h => pushUnique(l, h.id || 0, h.date, h.time, h.status === 'caught' ? "🚓 Провал угона (полиция)" : "🚗 Сдача авто (Угонщик)", `${h.name}: ${h.status === 'caught' ? '0 ₽' : '+' + fmt(h.price) + ' ₽'} (${h.duration || '—'})`, 'theft'));
                 (u.resellerItems || []).forEach(r => {
-                    let buyTs = Number(r.startTime) || Number(r.id) || 0;
-                    let buyD = buyTs > 1000000000000 ? new Date(buyTs) : null;
-                    pushUnique(
-                        l, buyTs,
-                        buyD ? buyD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
-                        buyD ? buyD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—',
-                        "📈 Покупка вещи (Перекуп)",
-                        `${r.name} за ${fmt(r.buyPrice)} ₽`,
-                        'perekup'
-                    );
+                    let buyTs = Number(r.startTime) || Number(r.id) || 0, buyD = buyTs > 1000000000000 ? new Date(buyTs) : null;
+                    pushUnique(l, buyTs, buyD ? buyD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—', buyD ? buyD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—', "📈 Покупка вещи (Перекуп)", `${r.name} за ${fmt(r.buyPrice)} ₽`, 'perekup');
                     if (isItemSold(r)) {
-                        let sellTs = Number(r.soldTime) || (buyTs + 1000);
-                        let sellD = sellTs > 1000000000000 ? new Date(sellTs) : null;
-                        let p = (r.sellPrice || 0) - (r.buyPrice || 0);
-                        pushUnique(
-                            l, sellTs,
-                            sellD ? sellD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—',
-                            sellD ? sellD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—',
-                            "💰 Продажа вещи (Перекуп)",
-                            `${r.name}: продано за ${fmt(r.sellPrice)} ₽ (прибыль: ${fmt(p)} ₽)`,
-                            'perekup'
-                        );
+                        let sellTs = Number(r.soldTime) || (buyTs + 1000), sellD = sellTs > 1000000000000 ? new Date(sellTs) : null;
+                        pushUnique(l, sellTs, sellD ? sellD.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '—', sellD ? sellD.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' }) : '—', "💰 Продажа вещи (Перекуп)", `${r.name}: продано за ${fmt(r.sellPrice)} ₽ (прибыль: ${fmt((r.sellPrice || 0) - (r.buyPrice || 0))} ₽)`, 'perekup');
                     }
                 });
-
-                (u.courierHistory || []).forEach(c => {
-                    pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽ (${c.duration || '—'})`, 'farm_other');
-                });
-
-                (u.houseHistory || []).forEach(h => {
-                    pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽ (${h.duration || '—'})`, 'farm_other');
-                });
-
-                (u.diceHistory || []).forEach(d => {
-                    pushUnique(l, d.id, d.date, d.time, "🎲 Игра в кости (Казино)", `${d.result === 'win' ? 'Победа +' : 'Проигрыш -'}${fmt(d.amount)} ₽`, 'casino');
-                });
-
-                (u.debts || []).forEach(d => {
-                    pushUnique(l, d.id, d.date, d.time, "💸 Запись о долге", `${d.person}: ${fmt(d.amount)} ₽ (${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'})`, 'debts');
-                });
+                (u.courierHistory || []).forEach(c => pushUnique(l, c.id, c.date, c.time, "📦 Развоз закладок", `${c.count} шт. × ${fmt(c.pricePerOne)} ₽ = +${fmt(c.earned)} ₽ (${c.duration || '—'})`, 'farm_other'));
+                (u.houseHistory || []).forEach(h => pushUnique(l, h.id, h.date, h.time, "🏠 Ограбление дома", `+${fmt(h.amount)} ₽ (${h.duration || '—'})`, 'farm_other'));
+                (u.diceHistory || []).forEach(d => pushUnique(l, d.id, d.date, d.time, "🎲 Игра в кости (Казино)", `${d.result === 'win' ? 'Победа +' : 'Проигрыш -'}${fmt(d.amount)} ₽`, 'casino'));
+                (u.debts || []).forEach(d => pushUnique(l, d.id, d.date, d.time, "💸 Запись о долге", `${d.person}: ${fmt(d.amount)} ₽ (${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'})`, 'debts'));
             });
 
             combined.sort((a, b) => {
@@ -1528,11 +1423,9 @@
                 return 0;
             });
 
-            let totalItems = combined.length;
-            let totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+            let totalItems = combined.length, totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
             if (adminLogsPage > totalPages) adminLogsPage = totalPages;
-            let startIdx = (adminLogsPage - 1) * pageSize;
-            let pageSlice = combined.slice(startIdx, startIdx + pageSize);
+            let pageSlice = combined.slice((adminLogsPage - 1) * pageSize, adminLogsPage * pageSize);
 
             $('logs-page-info').textContent = `Показано ${pageSlice.length} из ${totalItems} записей (Стр. ${adminLogsPage} из ${totalPages})`;
             $('btn-logs-prev').disabled = adminLogsPage <= 1;
@@ -1552,13 +1445,9 @@
             let selected = $('admin-log-user-filter').value;
             if (!confirm(`Очистить журнал кликов (${selected === 'all' ? 'всех игроков' : selected})?`)) return;
             for (let u of allUsersCache) {
-                if (selected === 'all' || u.login === selected) {
-                    if (u.uid) await updateDoc(doc(db, "users", u.uid), { activityLogs: [] });
-                }
+                if ((selected === 'all' || u.login === selected) && u.uid) await updateDoc(doc(db, "users", u.uid), { activityLogs: [] });
             }
-            if (selected === 'all') {
-                try { await setDoc(doc(db, "system", "logs"), { entries: [] }); } catch (e) {}
-            }
+            if (selected === 'all') { try { await setDoc(doc(db, "system", "logs"), { entries: [] }); } catch (e) {} }
             if (selected === 'all' || selected === currentLogin) userData.activityLogs = [];
             await loadGlobalRatings();
             showToast("Журнал кликов очищен!");
@@ -1582,13 +1471,12 @@
         window.addAllowedUser = async function() {
             let login = $('new-allowed-login').value.trim().toLowerCase(), days = parseFloat($('new-allowed-days').value) || 30;
             if (!login) return;
-            let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+            let snap = await getDoc(doc(db, "system", "config"));
             let data = snap.exists() ? snap.data() : {};
-            let map = { ...(data.allowedUsersMap || {}) };
-            let pendingMap = { ...(data.pendingRequestsMap || {}) };
+            let map = { ...(data.allowedUsersMap || {}) }, pendingMap = { ...(data.pendingRequestsMap || {}) };
             map[login] = Date.now() + (days * 86400000);
             delete pendingMap[login];
-            await setDoc(ref, { allowedUsersMap: map, pendingRequestsMap: pendingMap }, { merge: true });
+            await updateSystemConfigMaps({ allowedUsersMap: map, pendingRequestsMap: pendingMap });
             $('new-allowed-login').value = '';
             await loadGlobalRatings();
             showToast(`Доступ для "${login}" выдан!`);
@@ -1596,11 +1484,11 @@
 
         window.removeAllowedUser = async function(login) {
             try {
-                let ref = doc(db, "system", "config"), snap = await getDoc(ref);
+                let snap = await getDoc(doc(db, "system", "config"));
                 if (snap.exists()) {
                     let map = { ...(snap.data().allowedUsersMap || {}) };
                     delete map[login];
-                    await updateDoc(ref, { allowedUsersMap: map });
+                    await updateSystemConfigMaps({ allowedUsersMap: map });
                     await loadGlobalRatings();
                     showToast(`Подписка у "${login}" успешно забрана!`, "error");
                 }
@@ -1608,36 +1496,24 @@
         };
 
         window.toggleWheelBonus = function(cb) {
-            if (cb.checked && $('custom-price-check')) {
-                $('custom-price-check').checked = false;
-                $('custom-price-box').style.display = 'none';
-            }
+            if (cb.checked && $('custom-price-check')) { $('custom-price-check').checked = false; $('custom-price-box').style.display = 'none'; }
             $('wheel-bonus-select-box').style.display = cb.checked ? 'block' : 'none';
             updateCarInfo();
             logAction("Переключен бонус колеса казино", cb.checked ? "Включен" : "Выключен");
         };
 
         window.toggleCustomPrice = function(cb) {
-            if (cb.checked && $('wheel-bonus-check')) {
-                $('wheel-bonus-check').checked = false;
-                $('wheel-bonus-select-box').style.display = 'none';
-            }
+            if (cb.checked && $('wheel-bonus-check')) { $('wheel-bonus-check').checked = false; $('wheel-bonus-select-box').style.display = 'none'; }
             $('custom-price-box').style.display = cb.checked ? 'block' : 'none';
             updateCarInfo();
             logAction("Переключен ввод своей цены (Угон)", cb.checked ? "Включен" : "Выключен");
         };
 
         const getCurrentLevelObj = () => siteConfig.theftLevels[$('level-select')?.value] || siteConfig.theftLevels["7"] || { mode: 'custom', cars: [] };
-
-        function getActiveBonusPercent() {
-            let lvl = getCurrentLevelObj();
-            if (lvl.mode === 'custom' || $('custom-price-check')?.checked) return 0;
-            return $('wheel-bonus-check')?.checked ? (parseInt($('wheel-bonus-select').value) || 0) : 0;
-        }
+        const getActiveBonusPercent = () => (getCurrentLevelObj().mode === 'custom' || $('custom-price-check')?.checked) ? 0 : ($('wheel-bonus-check')?.checked ? (parseInt($('wheel-bonus-select').value) || 0) : 0);
 
         function updateCarList() {
-            let lvl = getCurrentLevelObj();
-            let isListMode = lvl.mode === 'list';
+            let lvl = getCurrentLevelObj(), isListMode = lvl.mode === 'list';
             $('car-select-box').style.display = isListMode ? 'block' : 'none';
             $('wheel-bonus-container').style.display = isListMode ? 'block' : 'none';
             $('custom-price-check-container').style.display = isListMode ? 'block' : 'none';
@@ -1669,7 +1545,6 @@
                 info.innerHTML = customVal > 0 ? `Своя цена оплаты: <strong style="color:var(--accent);">${fmt(customVal)} ₽</strong>` : `Введите свою сумму оплаты в поле выше`;
                 return;
             }
-
             let night = isNight(), basePrice = night ? car.night : car.day, bonusPct = getActiveBonusPercent();
             let finalPrice = Math.round(basePrice * (1 + bonusPct / 100));
             info.innerHTML = bonusPct > 0
@@ -1677,23 +1552,19 @@
                 : `Текущая цена (${night ? 'ночь' : 'день'}): <strong>${fmt(basePrice)} ₽</strong>`;
         }
 
-        // Авторизация и Регистрация (с поддержкой открытой подачи заявок на одобрение админом)
         async function authAction(isReg) {
             let l = $('auth-login').value.trim().toLowerCase(), p = $('auth-pass').value;
             if (!l || !p) return showToast("Введите логин и пароль!", "error");
             try {
                 if (isReg) {
-                    let charName = $('auth-char-name').value.trim();
-                    let staticId = $('auth-static').value.trim().replace(/^#/, '');
+                    let charName = $('auth-char-name').value.trim(), staticId = $('auth-static').value.trim().replace(/^#/, '');
                     if (!charName || !staticId) return showToast("Заполните Имя Фамилию персонажа и Статик!", "error");
 
                     let snap = await getDoc(doc(db, "system", "config"));
                     let cfg = snap.exists() ? snap.data() : {};
-                    let map = cfg.allowedUsersMap || {};
-                    let isOpenReg = Boolean(cfg.openRegistration);
-                    let hasPreApprovedSub = l === ADMIN_LOGIN || (map[l] && Date.now() < map[l]);
+                    let hasPreApprovedSub = l === ADMIN_LOGIN || (cfg.allowedUsersMap?.[l] && Date.now() < cfg.allowedUsersMap[l]);
 
-                    if (!hasPreApprovedSub && !isOpenReg) {
+                    if (!hasPreApprovedSub && !cfg.openRegistration) {
                         return showToast("Регистрация закрыта! Обратитесь к администратору за подпиской.", "error");
                     }
 
@@ -1703,10 +1574,9 @@
                     let cred = await createUserWithEmailAndPassword(auth, loginToEmail(l), p);
 
                     if (!hasPreApprovedSub) {
-                        // Сохраняем профиль и заявку в очередь на одобрение
                         let pendingMap = { ...(cfg.pendingRequestsMap || {}) };
                         pendingMap[l] = { uid: cred.user.uid, login: l, charName, staticId, requestedAt: Date.now() };
-                        await setDoc(doc(db, "system", "config"), { pendingRequestsMap: pendingMap }, { merge: true });
+                        await updateSystemConfigMaps({ pendingRequestsMap: pendingMap });
                         await setDoc(doc(db, "users", cred.user.uid), {
                             login: l, charName, staticId, status: "pending",
                             history: [], resellerItems: [], diceHistory: [], courierHistory: [], houseHistory: [], debts: [], customRecords: {},
@@ -1735,8 +1605,7 @@
                 if (!item.startTime) item.startTime = Number(item.id) || Date.now();
                 item.buyPrice = Number(item.buyPrice) || 0;
                 item.sellPrice = Number(item.sellPrice) || 0;
-                if (isItemSold(item)) item.status = 'sold';
-                else item.status = 'active';
+                item.status = isItemSold(item) ? 'sold' : 'active';
             });
         }
 
@@ -1759,10 +1628,8 @@
                     login: currentLogin,
                     charName: pendingRegistrationProfile?.charName || (currentLogin === ADMIN_LOGIN ? "Евгений Дубровский" : ""),
                     staticId: pendingRegistrationProfile?.staticId || (currentLogin === ADMIN_LOGIN ? "878" : ""),
-                    history: [], activeTheft: null,
-                    courierHistory: [], activeCourier: null,
-                    houseHistory: [], activeHouse: null,
-                    resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
+                    history: [], activeTheft: null, courierHistory: [], activeCourier: null,
+                    houseHistory: [], activeHouse: null, resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
                 };
                 pendingRegistrationProfile = null;
             }
@@ -1797,7 +1664,7 @@
             await commitChange("Запись удалена", "error", true, `Удаление из ${collectionKey}`, item?.name || item?.person || fmt(item?.amount || item?.price || item?.earned));
         };
 
-        // ==================== ОГРАБЛЕНИЕ ДОМОВ ====================
+        // ==================== ОГРАБЛЕНИЕ ДОМОВ И ЗАКЛАДЧИК ====================
         async function startHouse() {
             userData.activeHouse = { startTime: Date.now() };
             $('house-finish-inputs').style.display = 'none';
@@ -1808,9 +1675,7 @@
             let box = $('house-finish-inputs');
             if (!box) return;
             box.style.display = 'block';
-            if (siteConfig.defaults.houseAmount > 0 && !$('house-amount').value) {
-                $('house-amount').value = fmt(siteConfig.defaults.houseAmount);
-            }
+            if (siteConfig.defaults.houseAmount > 0 && !$('house-amount').value) $('house-amount').value = fmt(siteConfig.defaults.houseAmount);
             $('house-amount')?.focus();
         }
 
@@ -1818,11 +1683,8 @@
             if (!userData.activeHouse) return;
             let amount = getCleanNumber('house-amount');
             if (amount <= 0) return showToast("Введите корректную сумму ограбления!", "error");
-
             let sec = Math.max(0, Math.floor((Date.now() - (userData.activeHouse.startTime || Date.now())) / 1000));
-            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
-            let { shortTime: time, date } = getMskNow();
-
+            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`, { shortTime: time, date } = getMskNow();
             userData.houseHistory.unshift({ id: Date.now(), amount, duration, time, date });
             userData.activeHouse = null;
             $('house-amount').value = "";
@@ -1837,7 +1699,6 @@
             await commitChange("Ограбление дома отменено", "error", false, "Отмена ограбления дома", "0 ₽");
         }
 
-        // ==================== ЗАКЛАДЧИК ====================
         async function startCourier() {
             userData.activeCourier = { startTime: Date.now() };
             $('courier-finish-inputs').style.display = 'none';
@@ -1848,23 +1709,16 @@
             let box = $('courier-finish-inputs');
             if (!box) return;
             box.style.display = 'block';
-            if (siteConfig.defaults.courierPrice > 0 && !$('courier-price').value) {
-                $('courier-price').value = fmt(siteConfig.defaults.courierPrice);
-            }
+            if (siteConfig.defaults.courierPrice > 0 && !$('courier-price').value) $('courier-price').value = fmt(siteConfig.defaults.courierPrice);
             $('courier-count')?.focus();
         }
 
         async function finishCourier() {
             if (!userData.activeCourier) return;
-            let count = parseInt($('courier-count').value) || 0;
-            let pricePerOne = getCleanNumber('courier-price');
+            let count = parseInt($('courier-count').value) || 0, pricePerOne = getCleanNumber('courier-price');
             if (count <= 0 || pricePerOne <= 0) return showToast("Введите количество развезённых закладок и цену за 1 шт.!", "error");
-
             let sec = Math.max(0, Math.floor((Date.now() - (userData.activeCourier.startTime || Date.now())) / 1000));
-            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
-            let earned = count * pricePerOne;
-            let { shortTime: time, date } = getMskNow();
-
+            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`, earned = count * pricePerOne, { shortTime: time, date } = getMskNow();
             userData.courierHistory.unshift({ id: Date.now(), count, pricePerOne, earned, duration, time, date });
             userData.activeCourier = null;
             $('courier-count').value = "";
@@ -1884,7 +1738,6 @@
             let name = $('res-name').value.trim(), buyPrice = getCleanNumber('res-buy');
             let isRedemption = $('res-redemption').checked, owner = $('res-owner').value.trim();
             if (!name) return showToast("Введите название вещи!", "error");
-
             let nowTs = Date.now();
             userData.resellerItems.unshift({ id: nowTs, name, buyPrice, sellPrice: 0, isRedemption, owner: isRedemption ? owner : "", startTime: nowTs, status: "active" });
             $('res-name').value = ""; $('res-buy').value = ""; $('res-redemption').checked = false; $('res-owner').value = ""; $('res-owner-box').style.display = 'none';
@@ -1896,113 +1749,68 @@
         window.openSellResellerItem = function(id) {
             sellingItemId = String(id);
             renderState();
-            setTimeout(() => {
-                let inp = document.querySelector(`.sell-price-input-${sellingItemId}`);
-                if (inp) { inp.focus(); inp.select(); }
-            }, 30);
+            setTimeout(() => { let inp = document.querySelector(`.sell-price-input-${sellingItemId}`); if (inp) { inp.focus(); inp.select(); } }, 30);
         };
 
-        window.cancelSellResellerItem = function() {
-            sellingItemId = null;
-            renderState();
-        };
+        window.cancelSellResellerItem = function() { sellingItemId = null; renderState(); };
 
         window.confirmSellResellerItem = async function(id, btnEl) {
             let item = (userData.resellerItems || []).find(i => String(i.id) === String(id));
             if (!item) return showToast("Лот не найден!", "error");
-
-            let row = btnEl ? btnEl.closest('td') : null;
-            let inp = row ? row.querySelector('input') : document.querySelector(`.sell-price-input-${id}`);
+            let inp = btnEl ? btnEl.closest('td').querySelector('input') : document.querySelector(`.sell-price-input-${id}`);
             let sellPrice = cleanNumStr(inp?.value);
+            if (!inp || inp.value.trim() === '' || isNaN(sellPrice) || sellPrice < 0) return showToast("Введите корректную цену продажи!", "error");
 
-            if (!inp || inp.value.trim() === '' || isNaN(sellPrice) || sellPrice < 0) {
-                return showToast("Введите корректную цену продажи!", "error");
-            }
-
-            item.sellPrice = sellPrice;
-            item.status = "sold";
-            item.soldTime = Date.now();
+            item.sellPrice = sellPrice; item.status = "sold"; item.soldTime = Date.now();
             sellingItemId = null;
-
             let profit = sellPrice - (Number(item.buyPrice) || 0);
             await commitChange(`Продано! Прибыль: ${fmt(profit)} ₽`, profit >= 0 ? "success" : "error", true, "Продажа вещи (Перекуп)", `${item.name}: продано за ${fmt(sellPrice)} ₽ (прибыль ${fmt(profit)} ₽)`);
         };
 
         function renderResellerLedger() {
-            let allItems = userData.resellerItems || [];
             let statusFilter = $('ledger-status-filter')?.value || 'all';
             let sortMode = $('ledger-sort')?.value || 'date_desc';
             let pageSize = parseInt($('ledger-limit')?.value) || 25;
             let searchQuery = ($('ledger-search')?.value || '').trim().toLowerCase();
 
-            let filtered = allItems.filter(i => {
+            let filtered = (userData.resellerItems || []).filter(i => {
                 let sold = isItemSold(i);
                 if (statusFilter === 'sold' && !sold) return false;
                 if (statusFilter === 'active' && sold) return false;
                 if (statusFilter === 'redemption' && !i.isRedemption) return false;
-                if (searchQuery) {
-                    let hay = `${i.name || ''} ${i.owner || ''} ${i.buyPrice || ''} ${i.sellPrice || ''}`.toLowerCase();
-                    if (!hay.includes(searchQuery)) return false;
-                }
+                if (searchQuery && !`${i.name || ''} ${i.owner || ''} ${i.buyPrice || ''} ${i.sellPrice || ''}`.toLowerCase().includes(searchQuery)) return false;
                 return true;
             });
 
             filtered.sort((a, b) => {
-                let aSold = isItemSold(a), bSold = isItemSold(b);
-                let aProfit = aSold ? ((Number(a.sellPrice) || 0) - (Number(a.buyPrice) || 0)) : -999999999;
-                let bProfit = bSold ? ((Number(b.sellPrice) || 0) - (Number(b.buyPrice) || 0)) : -999999999;
-                let aTime = Number(a.soldTime || a.startTime || a.id) || 0;
-                let bTime = Number(b.soldTime || b.startTime || b.id) || 0;
-
+                let aProfit = isItemSold(a) ? ((Number(a.sellPrice) || 0) - (Number(a.buyPrice) || 0)) : -999999999;
+                let bProfit = isItemSold(b) ? ((Number(b.sellPrice) || 0) - (Number(b.buyPrice) || 0)) : -999999999;
+                let aTime = Number(a.soldTime || a.startTime || a.id) || 0, bTime = Number(b.soldTime || b.startTime || b.id) || 0;
                 if (sortMode === 'date_desc') return bTime - aTime;
                 if (sortMode === 'date_asc') return aTime - bTime;
                 if (sortMode === 'profit_desc') return bProfit - aProfit;
                 if (sortMode === 'profit_asc') return aProfit - bProfit;
                 if (sortMode === 'buy_desc') return (Number(b.buyPrice) || 0) - (Number(a.buyPrice) || 0);
-                if (sortMode === 'buy_asc') return (Number(a.buyPrice) || 0) - (Number(b.buyPrice) || 0);
-                return 0;
+                return (Number(a.buyPrice) || 0) - (Number(b.buyPrice) || 0);
             });
 
-            let totalItems = filtered.length;
-            let totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+            let totalItems = filtered.length, totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
             if (ledgerPage > totalPages) ledgerPage = totalPages;
-            let startIdx = (ledgerPage - 1) * pageSize;
-            let pageSlice = filtered.slice(startIdx, startIdx + pageSize);
+            let pageSlice = filtered.slice((ledgerPage - 1) * pageSize, ledgerPage * pageSize);
 
-            let soldCount = filtered.filter(isItemSold).length;
-            if ($('ledger-page-info')) {
-                $('ledger-page-info').textContent = `Показано ${pageSlice.length} из ${totalItems} записей (Продано: ${soldCount} | Стр. ${ledgerPage} из ${totalPages})`;
-            }
+            if ($('ledger-page-info')) $('ledger-page-info').textContent = `Показано ${pageSlice.length} из ${totalItems} записей (Продано: ${filtered.filter(isItemSold).length} | Стр. ${ledgerPage} из ${totalPages})`;
             if ($('btn-ledger-prev')) $('btn-ledger-prev').disabled = ledgerPage <= 1;
             if ($('btn-ledger-next')) $('btn-ledger-next').disabled = ledgerPage >= totalPages;
 
             renderList('reseller-ledger-list', pageSlice, "По выбранным фильтрам сделок не найдено", 5, i => {
-                let sold = isItemSold(i);
-                let buyP = Number(i.buyPrice) || 0;
-                let sellP = Number(i.sellPrice) || 0;
-                let p = sellP - buyP;
-                let buyDateStr = formatTsDateTime(i.startTime || i.id);
-                let sellDateStr = sold ? formatTsDateTime(i.soldTime) : '';
-
+                let sold = isItemSold(i), buyP = Number(i.buyPrice) || 0, sellP = Number(i.sellPrice) || 0, p = sellP - buyP;
+                let buyDateStr = formatTsDateTime(i.startTime || i.id), sellDateStr = sold ? formatTsDateTime(i.soldTime) : '';
                 let datesHtml = `<small style="color:var(--text-muted);display:block;margin-top:3px;">🛒 Куплено: ${buyDateStr}${sellDateStr && sellDateStr !== '—' ? `<br>💰 Продано: ${sellDateStr}` : ''}</small>`;
                 let redempHtml = i.isRedemption ? `<small style="color:var(--accent);display:block;">Выкуп от: ${i.owner || '—'}</small>` : '';
-
-                let statusBadge = sold
-                    ? `<span class="status-pill ${p >= 0 ? 'sold-pos' : 'sold-neg'}">${p >= 0 ? '+' : ''}${fmt(p)} ₽</span>`
-                    : `<span class="status-pill active-lot">⏳ В продаже</span>`;
-
-                return `
-                    <tr>
-                        <td><strong>${i.name || 'Без названия'}</strong>${redempHtml}${datesHtml}</td>
-                        <td style="white-space:nowrap;">${fmt(buyP)} ₽</td>
-                        <td style="white-space:nowrap;font-weight:600;color:${sold ? 'var(--text-color)' : 'var(--text-muted)'};">${sold ? fmt(sellP) + ' ₽' : '—'}</td>
-                        <td style="white-space:nowrap;">${statusBadge}</td>
-                        <td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('resellerItems', '${i.id}')" title="Удалить запись">✕</button></td>
-                    </tr>
-                `;
+                let statusBadge = sold ? `<span class="status-pill ${p >= 0 ? 'sold-pos' : 'sold-neg'}">${p >= 0 ? '+' : ''}${fmt(p)} ₽</span>` : `<span class="status-pill active-lot">⏳ В продаже</span>`;
+                return `<tr><td><strong>${i.name || 'Без названия'}</strong>${redempHtml}${datesHtml}</td><td style="white-space:nowrap;">${fmt(buyP)} ₽</td><td style="white-space:nowrap;font-weight:600;color:${sold ? 'var(--text-color)' : 'var(--text-muted)'};">${sold ? fmt(sellP) + ' ₽' : '—'}</td><td style="white-space:nowrap;">${statusBadge}</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('resellerItems', '${i.id}')">✕</button></td></tr>`;
             });
         }
-        // ====================================================================
 
         async function addDebtRecord() {
             let person = $('debt-person').value.trim(), amount = getCleanNumber('debt-amount'), type = $('debt-type').value;
@@ -2019,13 +1827,7 @@
             let { shortTime: time, date } = getMskNow();
             userData.diceHistory.unshift({ id: Date.now(), result, amount, time, date });
             $('dice-amount').value = siteConfig.defaults.diceBet > 0 ? fmt(siteConfig.defaults.diceBet) : "";
-            await commitChange(
-                result === 'win' ? `Победа: +${fmt(amount)} ₽` : `Проигрыш: -${fmt(amount)} ₽`,
-                result === 'win' ? 'success' : 'error',
-                true,
-                "Игра в кости (Казино)",
-                `${result === 'win' ? 'Победа' : 'Проигрыш'} ${fmt(amount)} ₽`
-            );
+            await commitChange(result === 'win' ? `Победа: +${fmt(amount)} ₽` : `Проигрыш: -${fmt(amount)} ₽`, result === 'win' ? 'success' : 'error', true, "Игра в кости (Казино)", `${result === 'win' ? 'Победа' : 'Проигрыш'} ${fmt(amount)} ₽`);
         }
 
         async function startTheft() {
@@ -2052,15 +1854,10 @@
 
         async function endTheft(caught = false) {
             if (!userData.activeTheft) return showToast("Нет активного угона!", "error");
-            let startMs = Number(userData.activeTheft.startTime) || Date.now();
-            let sec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-            let name = userData.activeTheft.carName || "Авто";
-            let level = userData.activeTheft.level || "7";
-            let customPrice = Number(userData.activeTheft.customPrice) || 0;
-            let bonusPct = Number(userData.activeTheft.bonusPercent) || 0;
-            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
-            let { shortTime: time, date } = getMskNow();
-
+            let sec = Math.max(0, Math.floor((Date.now() - (Number(userData.activeTheft.startTime) || Date.now())) / 1000));
+            let name = userData.activeTheft.carName || "Авто", level = userData.activeTheft.level || "7";
+            let customPrice = Number(userData.activeTheft.customPrice) || 0, bonusPct = Number(userData.activeTheft.bonusPercent) || 0;
+            let duration = `${Math.floor(sec / 60)} мин ${sec % 60} сек`, { shortTime: time, date } = getMskNow();
             if (!Array.isArray(userData.history)) userData.history = [];
 
             if (caught) {
@@ -2072,10 +1869,8 @@
             let lvlCars = siteConfig.theftLevels?.[level]?.cars || defaultSiteConfig.theftLevels["7"].cars;
             let foundCar = lvlCars.find(c => c.name === name) || defaultSiteConfig.theftLevels["7"].cars.find(c => c.name === name);
             let baseCarPrice = foundCar ? (isNight() ? Number(foundCar.night) : Number(foundCar.day)) : 0;
-
             let price = customPrice > 0 ? customPrice : Math.round(baseCarPrice * (1 + bonusPct / 100));
-            let isListMode = siteConfig.theftLevels?.[level]?.mode !== 'custom';
-            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice > 0 && isListMode ? `${name} (своя цена)` : name);
+            let displayCarName = bonusPct > 0 ? `${name} (+${bonusPct}%)` : (customPrice > 0 && siteConfig.theftLevels?.[level]?.mode !== 'custom' ? `${name} (своя цена)` : name);
 
             userData.history.unshift({ id: Date.now(), name: displayCarName, level, duration, price, status: 'success', time, date });
             userData.activeTheft = null;
@@ -2091,10 +1886,7 @@
             if (userData.activeTheft && $('active-timer')) $('active-timer').textContent = fmtTimerClock(userData.activeTheft.startTime);
             if (userData.activeCourier && $('active-courier-timer')) $('active-courier-timer').textContent = fmtTimerClock(userData.activeCourier.startTime);
             if (userData.activeHouse && $('active-house-timer')) $('active-house-timer').textContent = fmtTimerClock(userData.activeHouse.startTime);
-            document.querySelectorAll('.res-timer').forEach(el => {
-                let st = parseInt(el.dataset.start);
-                if (st) el.textContent = formatTime(Date.now() - st);
-            });
+            document.querySelectorAll('.res-timer').forEach(el => { let st = parseInt(el.dataset.start); if (st) el.textContent = formatTime(Date.now() - st); });
         }
 
         function sortResellerArray(arr) {
@@ -2109,64 +1901,42 @@
 
         function renderState() {
             normalizeResellerItems();
-
             let displayLogin = userData.login || currentLogin;
             let charInfo = userData.charName ? `${userData.charName}${userData.staticId ? ` (#${userData.staticId})` : ''}` : displayLogin;
             if ($('user-login')) $('user-login').innerHTML = `${charInfo} <small style="color:var(--text-muted);font-weight:normal;">[${displayLogin}]</small>`;
 
+            $('active-panel').style.display = userData.activeTheft ? 'block' : 'none';
+            $('start-panel').style.display = userData.activeTheft ? 'none' : 'block';
             if (userData.activeTheft) {
-                $('active-panel').style.display = 'block';
-                $('start-panel').style.display = 'none';
                 let bonusStr = userData.activeTheft.bonusPercent ? ` [Бонус +${userData.activeTheft.bonusPercent}%]` : '';
                 let priceInfo = userData.activeTheft.customPrice ? ` — ${fmt(userData.activeTheft.customPrice)} ₽` : ` (${userData.activeTheft.level} ур.)${bonusStr}`;
                 $('active-car-name').textContent = `${userData.activeTheft.carName}${priceInfo}`;
-            } else {
-                $('active-panel').style.display = 'none';
-                $('start-panel').style.display = 'block';
             }
 
-            if (userData.activeCourier) {
-                $('active-courier-panel').style.display = 'block';
-                $('start-courier-panel').style.display = 'none';
-            } else {
-                $('active-courier-panel').style.display = 'none';
-                $('start-courier-panel').style.display = 'block';
-            }
-
-            if (userData.activeHouse) {
-                $('active-house-panel').style.display = 'block';
-                $('start-house-panel').style.display = 'none';
-            } else {
-                $('active-house-panel').style.display = 'none';
-                $('start-house-panel').style.display = 'block';
-            }
+            $('active-courier-panel').style.display = userData.activeCourier ? 'block' : 'none';
+            $('start-courier-panel').style.display = userData.activeCourier ? 'none' : 'block';
+            $('active-house-panel').style.display = userData.activeHouse ? 'block' : 'none';
+            $('start-house-panel').style.display = userData.activeHouse ? 'none' : 'block';
             updateTimers();
 
-            let fLabel = formatPeriodLabel(farmPeriod, farmCustomDate);
+            let fLabel = formatPeriodLabel('farm');
             if ($('farm-total-period-label')) $('farm-total-period-label').textContent = `Общая выручка со всего фарма (${fLabel})`;
 
-            let fTheftList = (userData.history || []).filter(h => h.status !== 'caught' && isRecordInFarmPeriod(h.date, h.id));
-            let fCourierList = (userData.courierHistory || []).filter(c => isRecordInFarmPeriod(c.date, c.id));
-            let fHouseList = (userData.houseHistory || []).filter(h => isRecordInFarmPeriod(h.date, h.id));
+            let fTheftList = (userData.history || []).filter(h => h.status !== 'caught' && checkDateInPeriod(h.date, h.id, 'farm'));
+            let fCourierList = (userData.courierHistory || []).filter(c => checkDateInPeriod(c.date, c.id, 'farm'));
+            let fHouseList = (userData.houseHistory || []).filter(h => checkDateInPeriod(h.date, h.id, 'farm'));
 
-            let fTheftSum = sumBy(fTheftList, h => h.price);
-            let fCourierSum = sumBy(fCourierList, c => c.earned);
-            let fHouseSum = sumBy(fHouseList, h => h.amount);
-
+            let fTheftSum = sumBy(fTheftList, h => h.price), fCourierSum = sumBy(fCourierList, c => c.earned), fHouseSum = sumBy(fHouseList, h => h.amount);
             let fCustomSum = 0;
             (siteConfig.customSections || []).forEach(sec => {
                 if (sec.placement === 'farm' && sec.enabled !== false) {
-                    let recs = (userData.customRecords?.[sec.id] || []).filter(r => isRecordInFarmPeriod(r.date, r.id));
-                    fCustomSum += sumBy(recs, r => r.amount);
+                    fCustomSum += sumBy((userData.customRecords?.[sec.id] || []).filter(r => checkDateInPeriod(r.date, r.id, 'farm')), r => r.amount);
                 }
             });
 
-            let fTotalAll = fTheftSum + fCourierSum + fHouseSum + fCustomSum;
-            let fCourierCount = sumBy(fCourierList, c => c.count);
-
-            if ($('farm-total-earned-all')) $('farm-total-earned-all').textContent = fmt(fTotalAll) + ' ₽';
+            if ($('farm-total-earned-all')) $('farm-total-earned-all').textContent = fmt(fTheftSum + fCourierSum + fHouseSum + fCustomSum) + ' ₽';
             if ($('farm-total-breakdown')) {
-                $('farm-total-breakdown').innerHTML = `🚗 Угон: <b>${fmt(fTheftSum)} ₽</b> (${fTheftList.length} авто) &nbsp;|&nbsp; 📦 Закладки: <b>${fmt(fCourierSum)} ₽</b> (${fCourierCount} шт.) &nbsp;|&nbsp; 🏠 Дома: <b>${fmt(fHouseSum)} ₽</b> (${fHouseList.length} дом.)${fCustomSum > 0 ? ` &nbsp;|&nbsp; Доп: <b>${fmt(fCustomSum)} ₽</b>` : ''}`;
+                $('farm-total-breakdown').innerHTML = `🚗 Угон: <b>${fmt(fTheftSum)} ₽</b> (${fTheftList.length} авто) &nbsp;|&nbsp; 📦 Закладки: <b>${fmt(fCourierSum)} ₽</b> (${sumBy(fCourierList, c => c.count)} шт.) &nbsp;|&nbsp; 🏠 Дома: <b>${fmt(fHouseSum)} ₽</b> (${fHouseList.length} дом.)${fCustomSum > 0 ? ` &nbsp;|&nbsp; Доп: <b>${fmt(fCustomSum)} ₽</b>` : ''}`;
             }
 
             let today = getMskNow().date;
@@ -2179,23 +1949,15 @@
                 histTbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);">Нет записей</td></tr>`;
             } else {
                 let grouped = {};
-                userData.history.forEach((item, globalIndex) => {
-                    let day = item.date || 'Сегодня';
-                    (grouped[day] = grouped[day] || []).push({ item, globalIndex });
-                });
+                userData.history.forEach((item, globalIndex) => { (grouped[item.date || 'Сегодня'] = grouped[item.date || 'Сегодня'] || []).push({ item, globalIndex }); });
                 histTbody.innerHTML = Object.keys(grouped).map(day => {
                     let daySucc = grouped[day].filter(g => g.item.status !== 'caught');
                     let rows = `<tr class="day-header"><td colspan="5">📅 ${day} | Успешных: ${daySucc.length} | Заработано: ${fmt(sumBy(daySucc, g => g.item.price))} ₽</td></tr>`;
-                    return rows + grouped[day].map(({ item: i, globalIndex: idx }) => {
-                        let title = (i.name || '').includes('ур.') ? i.name : `${i.name} (${i.level} ур.)`;
-                        return `<tr class="${i.status === 'caught' ? 'caught-row' : ''}"><td>${title}</td><td>${i.time}</td><td>${i.duration}</td><td>${i.status === 'caught' ? 'Поймали менты (0 ₽)' : fmt(i.price) + ' ₽'}</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('history', ${idx}, true)">✕</button></td></tr>`;
-                    }).join('');
+                    return rows + grouped[day].map(({ item: i, globalIndex: idx }) => `<tr class="${i.status === 'caught' ? 'caught-row' : ''}"><td>${(i.name || '').includes('ур.') ? i.name : `${i.name} (${i.level} ур.)`}</td><td>${i.time}</td><td>${i.duration}</td><td>${i.status === 'caught' ? 'Поймали менты (0 ₽)' : fmt(i.price) + ' ₽'}</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('history', ${idx}, true)">✕</button></td></tr>`).join('');
                 }).join('');
             }
 
-            let items = sortResellerArray(userData.resellerItems || []);
-            let active = items.filter(i => !isItemSold(i)), sold = items.filter(isItemSold);
-
+            let items = sortResellerArray(userData.resellerItems || []), active = items.filter(i => !isItemSold(i)), sold = items.filter(isItemSold);
             $('res-cabinet-capital').textContent = fmt(sumBy(active, i => i.buyPrice)) + ' ₽';
             let net = sumBy(sold, i => (Number(i.sellPrice) || 0) - (Number(i.buyPrice) || 0));
             setSignedVal('res-cabinet-profit', net);
@@ -2203,69 +1965,39 @@
             $('res-analyst-revenue').textContent = fmt(sumBy(sold, i => i.sellPrice)) + ' ₽';
 
             const fDate = (ts) => (Number(ts) > 1000000000000) ? new Date(Number(ts)).toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) : '--';
-            const resActions = (item) => {
-                if (String(sellingItemId) === String(item.id)) {
-                    return `<td style="text-align:right;">
-                        <div class="sell-inline-box">
-                            <input type="text" class="sell-price-input-${item.id}" value="${fmt(item.buyPrice)}" placeholder="Цена продажи" oninput="formatMoneyInput(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmSellResellerItem('${item.id}', this);}">
-                            <button type="button" onclick="confirmSellResellerItem('${item.id}', this)" title="Подтвердить продажу">✅ ОК</button>
-                            <button type="button" class="secondary" onclick="cancelSellResellerItem()" title="Отмена">✕</button>
-                        </div>
-                    </td>`;
-                }
-                return `<td style="text-align:right;white-space:nowrap;">
-                    <button type="button" style="padding:6px 12px;font-size:0.82rem;width:auto;margin-top:0;" onclick="openSellResellerItem('${item.id}')">Продать</button>
-                    <button type="button" class="delete-btn" onclick="deleteRecord('resellerItems', '${item.id}')">✕</button>
-                </td>`;
-            };
+            const resActions = (item) => String(sellingItemId) === String(item.id)
+                ? `<td style="text-align:right;"><div class="sell-inline-box"><input type="text" class="sell-price-input-${item.id}" value="${fmt(item.buyPrice)}" placeholder="Цена продажи" oninput="formatMoneyInput(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmSellResellerItem('${item.id}', this);}"><button type="button" onclick="confirmSellResellerItem('${item.id}', this)">✅ ОК</button><button type="button" class="secondary" onclick="cancelSellResellerItem()">✕</button></div></td>`
+                : `<td style="text-align:right;white-space:nowrap;"><button type="button" style="padding:6px 12px;font-size:0.82rem;width:auto;margin-top:0;" onclick="openSellResellerItem('${item.id}')">Продать</button><button type="button" class="delete-btn" onclick="deleteRecord('resellerItems', '${item.id}')">✕</button></td>`;
 
-            renderList('res-cabinet-active-list', active, "Активных лотов нет", 4, i => `
-                <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">Куплено: ${fDate(i.startTime || i.id)}</small>${i.isRedemption ? `<br><small style="color:var(--accent);">Выкуп от: ${i.owner}</small>` : ""}</td><td>${fmt(i.buyPrice)} ₽</td><td>Активен</td>${resActions(i)}</tr>
-            `);
-
-            renderList('reseller-property-list', active, "Имущество не найдено", 5, i => `
-                <tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>⏳ <span class="res-timer" data-start="${i.startTime}">${formatTime(Date.now() - i.startTime)}</span></td><td>Активен</td>${resActions(i)}</tr>
-            `);
-
+            renderList('res-cabinet-active-list', active, "Активных лотов нет", 4, i => `<tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">Куплено: ${fDate(i.startTime || i.id)}</small>${i.isRedemption ? `<br><small style="color:var(--accent);">Выкуп от: ${i.owner}</small>` : ""}</td><td>${fmt(i.buyPrice)} ₽</td><td>Активен</td>${resActions(i)}</tr>`);
+            renderList('reseller-property-list', active, "Имущество не найдено", 5, i => `<tr><td><strong>${i.name}</strong><br><small style="color:var(--text-muted);">${fDate(i.startTime || i.id)}</small></td><td>${fmt(i.buyPrice)} ₽</td><td>⏳ <span class="res-timer" data-start="${i.startTime}">${formatTime(Date.now() - i.startTime)}</span></td><td>Активен</td>${resActions(i)}</tr>`);
             renderResellerLedger();
 
             let cList = userData.courierHistory || [], todayC = cList.filter(c => (c.date || today) === today);
             $('courier-today-count').textContent = sumBy(todayC, c => c.count);
             $('courier-today-earned').textContent = fmt(sumBy(todayC, c => c.earned)) + ' ₽';
-            renderList('courier-history-list', cList, "История закладок пуста", 6, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.earned)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('courierHistory', '${i.id}')">✕</button></td></tr>
-            `);
+            renderList('courier-history-list', cList, "История закладок пуста", 6, i => `<tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td>${i.count} шт.</td><td>${fmt(i.pricePerOne)} ₽</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.earned)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('courierHistory', '${i.id}')">✕</button></td></tr>`);
 
             let hList = userData.houseHistory || [], todayHList = hList.filter(h => (h.date || today) === today);
             $('house-today-count').textContent = todayHList.length;
             $('house-today-earned').textContent = fmt(sumBy(todayHList, h => h.amount)) + ' ₽';
-            renderList('house-history-list', hList, "История ограблений пуста", 4, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.amount)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('houseHistory', '${i.id}')">✕</button></td></tr>
-            `);
+            renderList('house-history-list', hList, "История ограблений пуста", 4, i => `<tr><td>${i.date} ${i.time}</td><td>${i.duration || '—'}</td><td style="color:var(--success);font-weight:bold;">+${fmt(i.amount)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('houseHistory', '${i.id}')">✕</button></td></tr>`);
 
-            let dice = userData.diceHistory || [];
-            let dw = sumBy(dice.filter(d => d.result === 'win'), d => d.amount), dl = sumBy(dice.filter(d => d.result === 'lose'), d => d.amount);
+            let dice = userData.diceHistory || [], dw = sumBy(dice.filter(d => d.result === 'win'), d => d.amount), dl = sumBy(dice.filter(d => d.result === 'lose'), d => d.amount);
             $('dice-stat-wins').textContent = fmt(dw) + ' ₽'; $('dice-stat-losses').textContent = fmt(dl) + ' ₽';
             setSignedVal('dice-stat-net', dw - dl);
-            renderList('dice-history-list', dice, "История костей пуста", 4, i => `
-                <tr><td>${i.date} ${i.time}</td><td>${fmt(i.amount)} ₽</td><td><span style="color:${i.result === 'win' ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${i.result === 'win' ? `Победа (+${fmt(i.amount)} ₽)` : `Проигрыш (-${fmt(i.amount)} ₽)`}</span></td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('diceHistory', '${i.id}')">✕</button></td></tr>
-            `);
+            renderList('dice-history-list', dice, "История костей пуста", 4, i => `<tr><td>${i.date} ${i.time}</td><td>${fmt(i.amount)} ₽</td><td><span style="color:${i.result === 'win' ? 'var(--success)' : 'var(--danger)'};font-weight:bold;">${i.result === 'win' ? `Победа (+${fmt(i.amount)} ₽)` : `Проигрыш (-${fmt(i.amount)} ₽)`}</span></td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('diceHistory', '${i.id}')">✕</button></td></tr>`);
 
             let debts = userData.debts || [];
             $('debt-stat-i-owe').textContent = fmt(sumBy(debts.filter(d => d.type === 'i_owe'), d => d.amount)) + ' ₽';
             $('debt-stat-owes-me').textContent = fmt(sumBy(debts.filter(d => d.type === 'owes_me'), d => d.amount)) + ' ₽';
-            renderList('debts-history-list', debts, "Список долгов пуст", 5, d => `
-                <tr><td>${d.date} ${d.time}</td><td><strong>${d.person}</strong></td><td style="font-weight:bold;">${fmt(d.amount)} ₽</td><td><span style="color:${d.type === 'i_owe' ? 'var(--danger)' : 'var(--success)'};font-weight:bold;">${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'}</span></td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('debts', '${d.id}')">✕</button></td></tr>
-            `);
+            renderList('debts-history-list', debts, "Список долгов пуст", 5, d => `<tr><td>${d.date} ${d.time}</td><td><strong>${d.person}</strong></td><td style="font-weight:bold;">${fmt(d.amount)} ₽</td><td><span style="color:${d.type === 'i_owe' ? 'var(--danger)' : 'var(--success)'};font-weight:bold;">${d.type === 'i_owe' ? 'Я должен' : 'Мне должны'}</span></td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteRecord('debts', '${d.id}')">✕</button></td></tr>`);
 
             (siteConfig.customSections || []).forEach(sec => {
-                let recs = userData.customRecords?.[sec.id] || [];
-                let todayRecs = recs.filter(r => (r.date || today) === today);
+                let recs = userData.customRecords?.[sec.id] || [], todayRecs = recs.filter(r => (r.date || today) === today);
                 if ($(`dyn-stat-cnt-${sec.id}`)) $(`dyn-stat-cnt-${sec.id}`).textContent = sumBy(todayRecs, r => r.count || 1);
                 if ($(`dyn-stat-earn-${sec.id}`)) $(`dyn-stat-earn-${sec.id}`).textContent = fmt(sumBy(todayRecs, r => r.amount)) + ' ₽';
-                renderList(`dyn-hist-${sec.id}`, recs, "Записей пока нет", 4, r => `
-                    <tr><td>${r.date} ${r.time}</td><td>${r.details}</td><td style="color:var(--success);font-weight:bold;">+${fmt(r.amount)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteCustomSecRecord('${sec.id}', '${r.id}')">✕</button></td></tr>
-                `);
+                renderList(`dyn-hist-${sec.id}`, recs, "Записей пока нет", 4, r => `<tr><td>${r.date} ${r.time}</td><td>${r.details}</td><td style="color:var(--success);font-weight:bold;">+${fmt(r.amount)} ₽</td><td style="text-align:right;"><button type="button" class="delete-btn" onclick="deleteCustomSecRecord('${sec.id}', '${r.id}')">✕</button></td></tr>`);
             });
         }
     </script>
@@ -2321,7 +2053,7 @@
                 </div>
             </div>
 
-            <!-- Админ 1: Заявки на регистрацию, подписки и профили игроков -->
+            <!-- Админ 1: Заявки, подписки и массовое управление пользователями -->
             <div id="admin-sub-subs" class="admin-content active">
                 <div class="card admin-card">
                     <h2>📩 Режим регистрации и Входящие заявки</h2>
@@ -2344,6 +2076,50 @@
                 </div>
 
                 <div class="card admin-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+                        <h2 style="margin:0; border:none; padding:0;">👤 Все игроки (Фильтр, Массовая выдача и Редактор)</h2>
+                        <span id="admin-users-count-badge" style="font-size:0.84rem; color:var(--text-muted);"></span>
+                    </div>
+
+                    <div class="data-toolbar">
+                        <select id="admin-users-status-filter">
+                            <option value="all">👥 Все игроки</option>
+                            <option value="active">✅ Активная подписка</option>
+                            <option value="expired">❌ Подписка закончилась / нет</option>
+                            <option value="pending">⏳ Ждут одобрения заявки</option>
+                        </select>
+                        <input type="text" id="admin-users-search" placeholder="🔍 Поиск по логину, Имени или Статику...">
+                    </div>
+
+                    <div class="bulk-bar">
+                        <strong style="color:var(--accent); font-size:0.9rem;">⚡ Массовая подписка:</strong>
+                        <input type="number" id="bulk-sub-days" value="7" step="0.5" min="0.5" style="width:85px;" title="Количество дней">
+                        <select id="bulk-sub-mode">
+                            <option value="add">➕ Прибавить (+дн. к текущей)</option>
+                            <option value="set">📅 Установить ровно N дн. от сегодня</option>
+                        </select>
+                        <button type="button" id="btn-bulk-selected" class="success-btn">✅ Выдать выбранным (0)</button>
+                        <button type="button" id="btn-bulk-all">🌍 Выдать ВСЕМ зарегистрированным</button>
+                    </div>
+
+                    <div class="scroll-table-box">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:36px; text-align:center;"><input type="checkbox" id="admin-users-select-all" class="row-check" onchange="toggleSelectAllFilteredUsers(this)" title="Выбрать всех в списке"></th>
+                                    <th style="width:165px;">Логин входа</th>
+                                    <th>Имя Фамилия персонажа</th>
+                                    <th style="width:105px;">Статик</th>
+                                    <th style="width:140px;">Подписка (Дней)</th>
+                                    <th style="width:100px; text-align:right;">Действие</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-profiles-list"><tr><td colspan="6" style="text-align:center;">Загрузка...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card admin-card">
                     <h2>🔑 Ручная выдача подписки по логину</h2>
                     <input type="text" id="new-allowed-login" placeholder="Логин пользователя (по нему игрок сможет зарегистрироваться или войти)">
                     <label style="margin-top: 10px; display: block; font-size: 0.9rem; color: var(--text-muted);">Срок (в днях):</label>
@@ -2353,15 +2129,6 @@
                     <table>
                         <thead><tr><th>Логин (Имя Фамилия #Статик)</th><th>Осталось времени</th><th style="width: 40px;"></th></tr></thead>
                         <tbody id="allowed-list"><tr><td colspan="3" style="text-align: center; color: var(--text-muted);">Список пуст</td></tr></tbody>
-                    </table>
-                </div>
-
-                <div class="card admin-card">
-                    <h2>👤 Все игроки (Редактор Логина, Имени Фамилии, Статика, Подписки и Удаление)</h2>
-                    <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0;">Сверху отсортированы игроки с наибольшим запасом подписки, а в самом низу — с закончившейся подпиской. Вы можете изменить любые поля (включая старый логин или дни подписки) и нажать 💾, либо полностью удалить профиль кнопкой 🗑:</p>
-                    <table>
-                        <thead><tr><th style="width:170px;">Логин входа</th><th>Имя Фамилия персонажа</th><th style="width:110px;">Статик</th><th style="width:140px;">Подписка (Дней)</th><th style="width:105px;">Действие</th></tr></thead>
-                        <tbody id="admin-users-profiles-list"><tr><td colspan="5" style="text-align:center;">Загрузка...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -2375,19 +2142,9 @@
                         <button type="button" id="btn-admin-add-level" class="secondary" style="width:auto; margin-top:0;">➕ Новый уровень</button>
                         <button type="button" id="btn-admin-delete-level" class="danger" style="width:auto; margin-top:0;">🗑 Удалить</button>
                     </div>
-
                     <div class="grid-2" style="margin-top:15px;">
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Название уровня в списке:</label>
-                            <input type="text" id="admin-level-name">
-                        </div>
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Режим работы уровня:</label>
-                            <select id="admin-level-mode">
-                                <option value="list">Список автомобилей с ценами День/Ночь</option>
-                                <option value="custom">Ручной ввод суммы оплаты игроком</option>
-                            </select>
-                        </div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Название уровня в списке:</label><input type="text" id="admin-level-name"></div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Режим работы уровня:</label><select id="admin-level-mode"><option value="list">Список автомобилей с ценами День/Ночь</option><option value="custom">Ручной ввод суммы оплаты игроком</option></select></div>
                     </div>
                     <button type="button" id="btn-admin-save-level" style="margin-top:15px;">💾 Сохранить параметры уровня</button>
                 </div>
@@ -2400,7 +2157,6 @@
                         <input type="text" id="adm-new-car-night" placeholder="Цена Ночью (₽)" oninput="formatMoneyInput(this)">
                     </div>
                     <button type="button" id="btn-admin-add-car" style="margin-top:12px;">Добавить автомобиль</button>
-
                     <h3 style="margin-top:25px; font-size:1rem;">Список машин уровня (можно менять прямо в таблице и нажимать 💾):</h3>
                     <table>
                         <thead><tr><th>Название авто</th><th>Днем (₽)</th><th>Ночью (₽)</th><th style="width:90px;">Действие</th></tr></thead>
@@ -2413,42 +2169,15 @@
             <div id="admin-sub-fields" class="admin-content">
                 <div class="card admin-card">
                     <h2>➕ Конструктор новых разделов и подразделов</h2>
-                    <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0;">Создавайте новые направления фарма или отдельные вкладки (с автоматическим появлением в Рейтинге):</p>
                     <div class="grid-2">
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Название кнопки/раздела:</label>
-                            <input type="text" id="adm-new-sec-title" placeholder="Напр: 🐟 Рыбалка или 🚛 Дальнобой">
-                        </div>
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Куда добавить кнопку:</label>
-                            <select id="adm-new-sec-place">
-                                <option value="farm">Внутрь раздела «Фарм» (как подраздел)</option>
-                                <option value="main">В верхнее главное меню (отдельная вкладка)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Как считать заработок:</label>
-                            <select id="adm-new-sec-mode">
-                                <option value="amount">Игрок вводит только полученную сумму (как Дома)</option>
-                                <option value="count_custom">Игрок вводит Кол-во и Цену за 1 ед. (как Закладки)</option>
-                                <option value="count_fixed">Игрок вводит только Кол-во × Фикс. цена ниже</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Фикс. цена / Цена по умолчанию (₽):</label>
-                            <input type="text" id="adm-new-sec-price" placeholder="Например, 25 000" oninput="formatMoneyInput(this)">
-                        </div>
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Подпись поля ввода:</label>
-                            <input type="text" id="adm-new-sec-unit" placeholder="Напр: Количество рейсов / Сумма">
-                        </div>
-                        <div>
-                            <label style="font-size:0.85rem; color:var(--text-muted);">Текст кнопки добавления:</label>
-                            <input type="text" id="adm-new-sec-btn" placeholder="Напр: Засчитать рейс">
-                        </div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Название кнопки/раздела:</label><input type="text" id="adm-new-sec-title" placeholder="Напр: 🐟 Рыбалка или 🚛 Дальнобой"></div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Куда добавить кнопку:</label><select id="adm-new-sec-place"><option value="farm">Внутрь раздела «Фарм» (как подраздел)</option><option value="main">В верхнее главное меню (отдельная вкладка)</option></select></div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Как считать заработок:</label><select id="adm-new-sec-mode"><option value="amount">Игрок вводит только полученную сумму</option><option value="count_custom">Игрок вводит Кол-во и Цену за 1 ед.</option><option value="count_fixed">Игрок вводит только Кол-во × Фикс. цена</option></select></div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Фикс. цена / Цена по умолчанию (₽):</label><input type="text" id="adm-new-sec-price" placeholder="Например, 25 000" oninput="formatMoneyInput(this)"></div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Подпись поля ввода:</label><input type="text" id="adm-new-sec-unit" placeholder="Напр: Количество рейсов / Сумма"></div>
+                        <div><label style="font-size:0.85rem; color:var(--text-muted);">Текст кнопки добавления:</label><input type="text" id="adm-new-sec-btn" placeholder="Напр: Засчитать рейс"></div>
                     </div>
                     <button type="button" id="btn-admin-add-custom-sec" style="margin-top:15px;">➕ Создать новый раздел / подраздел</button>
-
                     <h3 style="margin-top:25px; font-size:0.95rem; color:var(--accent);">Созданные вами дополнительные разделы:</h3>
                     <table>
                         <thead><tr><th style="width:40px;">Вкл</th><th>Название</th><th>Расположение</th><th>Цена (₽)</th><th style="width:90px;">Действие</th></tr></thead>
@@ -2469,7 +2198,7 @@
                         <div><small style="color:var(--text-muted);">Поле 4 (Пароль):</small><input type="text" id="adm-ph-pass"></div>
                     </div>
 
-                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Главные вкладки (галочка — показывать/скрыть вкладку):</h3>
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Главные вкладки (вкл/выкл и название):</h3>
                     <div class="grid-2">
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-tabPerekup"><input type="text" id="adm-lbl-tabPerekup"></div>
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-tabFarm"><input type="text" id="adm-lbl-tabFarm"></div>
@@ -2478,7 +2207,7 @@
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-tabRating"><input type="text" id="adm-lbl-tabRating"></div>
                     </div>
 
-                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Подразделы «Перекупа» (вкл/выкл и название):</h3>
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Подразделы «Перекупа»:</h3>
                     <div class="grid-2">
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-subCabinet"><input type="text" id="adm-lbl-subCabinet"></div>
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-subProperty"><input type="text" id="adm-lbl-subProperty"></div>
@@ -2486,31 +2215,31 @@
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-subAnalytics"><input type="text" id="adm-lbl-subAnalytics"></div>
                     </div>
 
-                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Базовые подразделы «Фарма» (вкл/выкл и название):</h3>
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Базовые подразделы «Фарма»:</h3>
                     <div class="grid-3">
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-subTheft"><input type="text" id="adm-lbl-subTheft"></div>
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-subCourier"><input type="text" id="adm-lbl-subCourier"></div>
                         <div class="ctrl-row"><input type="checkbox" id="adm-vis-subHouse"><input type="text" id="adm-lbl-subHouse"></div>
                     </div>
 
-                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Названия кнопок действий на сайте:</h3>
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Названия кнопок действий:</h3>
                     <div class="grid-2">
-                        <div><small style="color:var(--text-muted);">Кнопка добавления вещи (Перекуп):</small><input type="text" id="adm-btnAddReseller"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка старта угона:</small><input type="text" id="adm-btnStartTheft"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка успешной сдачи угона:</small><input type="text" id="adm-btnFinishTheft"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка провала угона (полиция):</small><input type="text" id="adm-btnCaughtTheft"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка старта развоза закладок:</small><input type="text" id="adm-btnAddCourier"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка старта ограбления дома:</small><input type="text" id="adm-btnAddHouse"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка записи игры в казино:</small><input type="text" id="adm-btnAddDice"></div>
-                        <div><small style="color:var(--text-muted);">Кнопка добавления долга:</small><input type="text" id="adm-btnAddDebt"></div>
+                        <div><small style="color:var(--text-muted);">Добавить вещь (Перекуп):</small><input type="text" id="adm-btnAddReseller"></div>
+                        <div><small style="color:var(--text-muted);">Старт угона:</small><input type="text" id="adm-btnStartTheft"></div>
+                        <div><small style="color:var(--text-muted);">Успешная сдача угона:</small><input type="text" id="adm-btnFinishTheft"></div>
+                        <div><small style="color:var(--text-muted);">Провал угона (полиция):</small><input type="text" id="adm-btnCaughtTheft"></div>
+                        <div><small style="color:var(--text-muted);">Старт развоза закладок:</small><input type="text" id="adm-btnAddCourier"></div>
+                        <div><small style="color:var(--text-muted);">Старт ограбления дома:</small><input type="text" id="adm-btnAddHouse"></div>
+                        <div><small style="color:var(--text-muted);">Записать игру в казино:</small><input type="text" id="adm-btnAddDice"></div>
+                        <div><small style="color:var(--text-muted);">Добавить долг:</small><input type="text" id="adm-btnAddDebt"></div>
                     </div>
 
-                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Стоимости по умолчанию и проценты колеса казино:</h3>
+                    <h3 style="margin-top:20px; font-size:0.95rem; color:var(--accent);">Стоимости по умолчанию и бонусы колеса:</h3>
                     <div class="grid-2">
-                        <div><small style="color:var(--text-muted);">Цена 1 закладки по умолчанию (0 = пусто):</small><input type="number" id="adm-def-courier"></div>
-                        <div><small style="color:var(--text-muted);">Сумма за дом по умолчанию (0 = пусто):</small><input type="number" id="adm-def-house"></div>
-                        <div><small style="color:var(--text-muted);">Цена авто 1-6 ур. по умолчанию (0 = пусто):</small><input type="number" id="adm-def-lowtheft"></div>
-                        <div><small style="color:var(--text-muted);">Ставка в кости по умолчанию (0 = пусто):</small><input type="number" id="adm-def-dice"></div>
+                        <div><small style="color:var(--text-muted);">Цена 1 закладки (0 = пусто):</small><input type="number" id="adm-def-courier"></div>
+                        <div><small style="color:var(--text-muted);">Сумма за дом (0 = пусто):</small><input type="number" id="adm-def-house"></div>
+                        <div><small style="color:var(--text-muted);">Цена авто 1-6 ур. (0 = пусто):</small><input type="number" id="adm-def-lowtheft"></div>
+                        <div><small style="color:var(--text-muted);">Ставка в кости (0 = пусто):</small><input type="number" id="adm-def-dice"></div>
                     </div>
                     <div style="margin-top:12px;">
                         <small style="color:var(--text-muted);">Проценты бонуса из колеса казино (через запятую):</small>
@@ -2533,9 +2262,7 @@
                     </div>
 
                     <div class="data-toolbar">
-                        <select id="admin-log-user-filter">
-                            <option value="all">👤 Все игроки</option>
-                        </select>
+                        <select id="admin-log-user-filter"><option value="all">👤 Все игроки</option></select>
                         <select id="admin-log-type-filter">
                             <option value="all">📂 Все события (клики + операции)</option>
                             <option value="operations">💰 Только финансовые операции</option>
@@ -2566,9 +2293,7 @@
                         <span id="logs-page-info">Показано 0 из 0</span>
                         <div class="page-btns">
                             <select id="admin-log-limit" style="width:auto; margin:0; padding:7px 10px; font-size:0.85rem;">
-                                <option value="25">По 25 строк</option>
-                                <option value="50" selected>По 50 строк</option>
-                                <option value="100">По 100 строк</option>
+                                <option value="25">По 25 строк</option><option value="50" selected>По 50 строк</option><option value="100">По 100 строк</option>
                             </select>
                             <button type="button" id="btn-logs-prev" class="secondary">◀ Назад</button>
                             <button type="button" id="btn-logs-next" class="secondary">Вперед ▶</button>
@@ -2628,7 +2353,6 @@
                 </div>
             </div>
 
-            <!-- Компактная Торговая тетрадь -->
             <div id="section-ledger" class="section-block">
                 <div class="card">
                     <h2>📓 Торговая тетрадь (История всех сделок и лотов)</h2>
@@ -2649,29 +2373,17 @@
                         </select>
                         <input type="text" id="ledger-search" placeholder="🔍 Поиск по названию вещи или владельцу...">
                     </div>
-
                     <div class="scroll-table-box">
                         <table>
-                            <thead>
-                                <tr>
-                                    <th>Вещь / Даты</th>
-                                    <th style="width:130px;">Покупка</th>
-                                    <th style="width:130px;">Продажа</th>
-                                    <th style="width:160px;">Прибыль / Статус</th>
-                                    <th style="width:45px;"></th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th>Вещь / Даты</th><th style="width:130px;">Покупка</th><th style="width:130px;">Продажа</th><th style="width:160px;">Прибыль / Статус</th><th style="width:45px;"></th></tr></thead>
                             <tbody id="reseller-ledger-list"><tr><td colspan="5" style="text-align: center;">Пусто</td></tr></tbody>
                         </table>
                     </div>
-
                     <div class="table-pagination">
                         <span id="ledger-page-info">Показано 0 из 0</span>
                         <div class="page-btns">
                             <select id="ledger-limit" style="width:auto; margin:0; padding:7px 10px; font-size:0.85rem;">
-                                <option value="25" selected>По 25 строк</option>
-                                <option value="50">По 50 строк</option>
-                                <option value="100">По 100 строк</option>
+                                <option value="25" selected>По 25 строк</option><option value="50">По 50 строк</option><option value="100">По 100 строк</option>
                             </select>
                             <button type="button" id="btn-ledger-prev" class="secondary">◀ Назад</button>
                             <button type="button" id="btn-ledger-next" class="secondary">Вперед ▶</button>
@@ -2692,13 +2404,13 @@
         <div id="tab-farm" class="tab-content">
             <div class="rating-filter-bar">
                 <div class="sub-tabs-links">
-                    <button type="button" class="sub-btn farm-period-btn active" data-period="today" onclick="setFarmPeriod('today')">📅 За сегодня</button>
-                    <button type="button" class="sub-btn farm-period-btn" data-period="week" onclick="setFarmPeriod('week')">📆 За неделю</button>
-                    <button type="button" class="sub-btn farm-period-btn" data-period="month" onclick="setFarmPeriod('month')">🗓 За месяц</button>
-                    <button type="button" class="sub-btn farm-period-btn" data-period="all" onclick="setFarmPeriod('all')">♾ За всё время</button>
-                    <button type="button" class="sub-btn farm-period-btn" data-period="custom" onclick="setFarmPeriod('custom')">🔍 Выбрать дату</button>
+                    <button type="button" class="sub-btn farm-period-btn active" data-period="today" onclick="setPeriod('farm','today')">📅 За сегодня</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="week" onclick="setPeriod('farm','week')">📆 За неделю</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="month" onclick="setPeriod('farm','month')">🗓 За месяц</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="all" onclick="setPeriod('farm','all')">♾ За всё время</button>
+                    <button type="button" class="sub-btn farm-period-btn" data-period="custom" onclick="setPeriod('farm','custom')">🔍 Выбрать дату</button>
                 </div>
-                <input type="date" id="farm-custom-date" class="rating-date-picker" style="display:none;" onchange="onFarmDateChange(this)">
+                <input type="date" id="farm-custom-date" class="rating-date-picker" style="display:none;" onchange="onPeriodDateChange('farm', this)">
             </div>
 
             <div class="stat-card" style="margin-bottom: 25px; border-color: rgba(245, 158, 11, 0.35); background: linear-gradient(180deg, rgba(245, 158, 11, 0.08) 0%, rgba(17, 24, 39, 0.8) 100%);">
@@ -2715,7 +2427,7 @@
                 </div>
             </div>
 
-            <!-- Подраздел: Угонщик -->
+            <!-- Угонщик -->
             <div id="farm-sub-theft" class="farm-content active">
                 <div class="clock-box">Московское время: <span id="msk-time" class="time-val">--:--:--</span> | <span id="time-status" style="font-weight: bold;">--</span></div>
                 <div class="stats-grid">
@@ -2735,34 +2447,15 @@
                     <h2>Начать новый угон</h2>
                     <label>Выберите уровень:</label>
                     <select id="level-select"></select>
-
-                    <div id="car-select-box">
-                        <label style="margin-top: 15px; display: block;">Выберите автомобиль:</label>
-                        <select id="car-select"></select>
-                    </div>
-
+                    <div id="car-select-box"><label style="margin-top: 15px; display: block;">Выберите автомобиль:</label><select id="car-select"></select></div>
                     <div id="wheel-bonus-container" style="margin-top: 15px;">
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="wheel-bonus-check" style="width: auto; margin: 0;" onchange="toggleWheelBonus(this)">
-                            <span>Бонус из колеса казино (+% к оплате)</span>
-                        </label>
-                        <div id="wheel-bonus-select-box" style="display: none; margin-top: 10px;">
-                            <select id="wheel-bonus-select"></select>
-                        </div>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;"><input type="checkbox" id="wheel-bonus-check" style="width: auto; margin: 0;" onchange="toggleWheelBonus(this)"><span>Бонус из колеса казино (+% к оплате)</span></label>
+                        <div id="wheel-bonus-select-box" style="display: none; margin-top: 10px;"><select id="wheel-bonus-select"></select></div>
                     </div>
-
                     <div id="custom-price-check-container" style="margin-top: 12px;">
-                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                            <input type="checkbox" id="custom-price-check" style="width: auto; margin: 0;" onchange="toggleCustomPrice(this)">
-                            <span>Другая сумма оплаты (свой бонус / ручной ввод)</span>
-                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;"><input type="checkbox" id="custom-price-check" style="width: auto; margin: 0;" onchange="toggleCustomPrice(this)"><span>Другая сумма оплаты (свой бонус / ручной ввод)</span></label>
                     </div>
-
-                    <div id="custom-price-box" style="display:none;">
-                        <label style="margin-top: 15px; display: block;">Стоимость за авто (₽):</label>
-                        <input type="text" id="custom-theft-price" placeholder="Например, 55 000" oninput="formatMoneyInput(this)">
-                    </div>
-
+                    <div id="custom-price-box" style="display:none;"><label style="margin-top: 15px; display: block;">Стоимость за авто (₽):</label><input type="text" id="custom-theft-price" placeholder="Например, 55 000" oninput="formatMoneyInput(this)"></div>
                     <div id="selected-car-info" style="margin-top: 15px; color: var(--text-muted);"></div>
                     <button type="button" id="btn-start" style="margin-top: 15px;">Начать поиск / угон</button>
                 </div>
@@ -2775,13 +2468,12 @@
                 </div>
             </div>
 
-            <!-- Подраздел: Закладчик -->
+            <!-- Закладчик -->
             <div id="farm-sub-courier" class="farm-content">
                 <div class="stats-grid">
                     <div class="stat-card"><div>Закладок за сегодня</div><div id="courier-today-count" class="stat-value">0</div></div>
                     <div class="stat-card"><div>Заработано за сегодня (Закладки)</div><div id="courier-today-earned" class="stat-value">0 ₽</div></div>
                 </div>
-
                 <div class="card" id="active-courier-panel" style="display:none;">
                     <h2>📦 Активный развоз закладок</h2>
                     <p style="color:var(--text-muted); margin-bottom:4px;">Время в пути:</p>
@@ -2790,22 +2482,17 @@
                         <button type="button" id="btn-open-finish-courier" style="flex:1;">Закончить развоз</button>
                         <button type="button" id="btn-cancel-courier" class="danger" style="flex:1;">Отменить развоз</button>
                     </div>
-
                     <div id="courier-finish-inputs" class="finish-box" style="display:none;">
-                        <label>Количество развезённых закладок:</label>
-                        <input type="number" id="courier-count" placeholder="Например, 15">
-                        <label style="margin-top: 15px; display: block;">Сумма за 1 закладку (₽):</label>
-                        <input type="text" id="courier-price" placeholder="Например, 12 000" oninput="formatMoneyInput(this)">
+                        <label>Количество развезённых закладок:</label><input type="number" id="courier-count" placeholder="Например, 15">
+                        <label style="margin-top: 15px; display: block;">Сумма за 1 закладку (₽):</label><input type="text" id="courier-price" placeholder="Например, 12 000" oninput="formatMoneyInput(this)">
                         <button type="button" id="btn-save-courier" style="margin-top: 15px;">✅ Подтвердить и сохранить в статистику</button>
                     </div>
                 </div>
-
                 <div class="card" id="start-courier-panel">
                     <h2>📦 Развоз закладок</h2>
                     <p style="color:var(--text-muted); margin-top:0;">Нажмите кнопку ниже, когда берете задание на закладки, чтобы запустить секундомер:</p>
                     <button type="button" id="btn-start-courier">Начать развоз закладок</button>
                 </div>
-
                 <div class="card">
                     <h2>История закладок</h2>
                     <table>
@@ -2815,13 +2502,12 @@
                 </div>
             </div>
 
-            <!-- Подраздел: Ограбление домов -->
+            <!-- Ограбление домов -->
             <div id="farm-sub-house" class="farm-content">
                 <div class="stats-grid">
                     <div class="stat-card"><div>Домов за сегодня</div><div id="house-today-count" class="stat-value">0</div></div>
                     <div class="stat-card"><div>Заработано за сегодня (Дома)</div><div id="house-today-earned" class="stat-value">0 ₽</div></div>
                 </div>
-
                 <div class="card" id="active-house-panel" style="display:none;">
                     <h2>🏠 Активное ограбление дома</h2>
                     <p style="color:var(--text-muted); margin-bottom:4px;">Время выполнения:</p>
@@ -2830,20 +2516,16 @@
                         <button type="button" id="btn-open-finish-house" style="flex:1;">Закончить ограбление</button>
                         <button type="button" id="btn-cancel-house" class="danger" style="flex:1;">Отменить</button>
                     </div>
-
                     <div id="house-finish-inputs" class="finish-box" style="display:none;">
-                        <label>Полученная сумма за ограбление дома (₽):</label>
-                        <input type="text" id="house-amount" placeholder="Например, 45 000" oninput="formatMoneyInput(this)">
+                        <label>Полученная сумма за ограбление дома (₽):</label><input type="text" id="house-amount" placeholder="Например, 45 000" oninput="formatMoneyInput(this)">
                         <button type="button" id="btn-save-house" style="margin-top: 15px;">✅ Подтвердить и сохранить в статистику</button>
                     </div>
                 </div>
-
                 <div class="card" id="start-house-panel">
                     <h2>🏠 Ограбление дома</h2>
                     <p style="color:var(--text-muted); margin-top:0;">Нажмите кнопку ниже при старте задания, чтобы запустить таймер ограбления:</p>
                     <button type="button" id="btn-start-house">Начать ограбление дома</button>
                 </div>
-
                 <div class="card">
                     <h2>История ограблений домов</h2>
                     <table>
@@ -2903,61 +2585,38 @@
         <div id="tab-rating" class="tab-content">
             <div class="rating-filter-bar">
                 <div class="sub-tabs-links">
-                    <button type="button" class="sub-btn rating-period-btn active" data-period="today" onclick="setRatingPeriod('today')">📅 За сегодня</button>
-                    <button type="button" class="sub-btn rating-period-btn" data-period="week" onclick="setRatingPeriod('week')">📆 За неделю</button>
-                    <button type="button" class="sub-btn rating-period-btn" data-period="month" onclick="setRatingPeriod('month')">🗓 За месяц</button>
-                    <button type="button" class="sub-btn rating-period-btn" data-period="all" onclick="setRatingPeriod('all')">♾ За всё время</button>
-                    <button type="button" class="sub-btn rating-period-btn" data-period="custom" onclick="setRatingPeriod('custom')">🔍 Выбрать дату</button>
+                    <button type="button" class="sub-btn rating-period-btn active" data-period="today" onclick="setPeriod('rating','today')">📅 За сегодня</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="week" onclick="setPeriod('rating','week')">📆 За неделю</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="month" onclick="setPeriod('rating','month')">🗓 За месяц</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="all" onclick="setPeriod('rating','all')">♾ За всё время</button>
+                    <button type="button" class="sub-btn rating-period-btn" data-period="custom" onclick="setPeriod('rating','custom')">🔍 Выбрать дату</button>
                 </div>
-                <input type="date" id="rating-custom-date" class="rating-date-picker" style="display:none;" onchange="onRatingDateChange(this)">
+                <input type="date" id="rating-custom-date" class="rating-date-picker" style="display:none;" onchange="onPeriodDateChange('rating', this)">
             </div>
 
             <div class="card">
                 <h2>🚗 Рейтинг угонщиков (Фарм)</h2>
-                <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-theft-cnt">Машин (за сегодня)</th><th id="th-theft-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead>
-                    <tbody id="rating-theft-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
-                </table>
+                <table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-theft-cnt">Машин (за сегодня)</th><th id="th-theft-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead><tbody id="rating-theft-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody></table>
             </div>
-
             <div class="card">
                 <h2>📦 Рейтинг закладчиков (Фарм)</h2>
-                <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-courier-cnt">Закладок (за сегодня)</th><th id="th-courier-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead>
-                    <tbody id="rating-courier-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
-                </table>
+                <table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-courier-cnt">Закладок (за сегодня)</th><th id="th-courier-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead><tbody id="rating-courier-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody></table>
             </div>
-
             <div class="card">
                 <h2>🏠 Рейтинг ограбления домов (Фарм)</h2>
-                <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-house-cnt">Ограблений (за сегодня)</th><th id="th-house-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead>
-                    <tbody id="rating-house-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
-                </table>
+                <table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-house-cnt">Ограблений (за сегодня)</th><th id="th-house-earn">Заработано (за сегодня)</th><th>Всего за всё время</th></tr></thead><tbody id="rating-house-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody></table>
             </div>
-
             <div class="card">
                 <h2>📈 Рейтинг перекупов</h2>
-                <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Последняя проданная вещь</th><th id="th-reseller-rev">Выручка (за сегодня)</th><th id="th-reseller-prof">Чистая прибыль (за сегодня)</th></tr></thead>
-                    <tbody id="rating-reseller-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
-                </table>
+                <table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th>Последняя проданная вещь</th><th id="th-reseller-rev">Выручка (за сегодня)</th><th id="th-reseller-prof">Чистая прибыль (за сегодня)</th></tr></thead><tbody id="rating-reseller-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody></table>
             </div>
-
             <div class="card">
                 <h2>🎰 Рейтинг казино (Кости)</h2>
-                <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-casino-win">Выиграно (за сегодня)</th><th id="th-casino-lose">Проиграно (за сегодня)</th><th id="th-casino-net">Баланс (за сегодня)</th></tr></thead>
-                    <tbody id="rating-casino-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
-                </table>
+                <table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-casino-win">Выиграно (за сегодня)</th><th id="th-casino-lose">Проиграно (за сегодня)</th><th id="th-casino-net">Баланс (за сегодня)</th></tr></thead><tbody id="rating-casino-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody></table>
             </div>
-
             <div class="card">
                 <h2>💸 Статистика долгов</h2>
-                <table>
-                    <thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-debts-owe">Должен (за сегодня)</th><th id="th-debts-oweme">Должны ему (за сегодня)</th><th id="th-debts-net">Баланс (за сегодня)</th></tr></thead>
-                    <tbody id="rating-debts-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody>
-                </table>
+                <table><thead><tr><th>Персонаж (Имя Фамилия #Статик)</th><th id="th-debts-owe">Должен (за сегодня)</th><th id="th-debts-oweme">Должны ему (за сегодня)</th><th id="th-debts-net">Баланс (за сегодня)</th></tr></thead><tbody id="rating-debts-list"><tr><td colspan="4" style="text-align: center;">Загрузка...</td></tr></tbody></table>
             </div>
         </div>
 
