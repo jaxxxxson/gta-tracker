@@ -52,6 +52,9 @@
         .time-val { color: var(--accent); font-weight: bold; }
         .card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid var(--card-border); border-radius: 18px; padding: 25px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
         .admin-card { border: 1px dashed rgba(245, 158, 11, 0.4); background: rgba(15, 23, 42, 0.85); }
+        .cooldown-card { border: 1px solid rgba(245, 158, 11, 0.55); background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(17, 24, 39, 0.9) 100%); }
+        .cooldown-bar-wrap { width: 100%; height: 8px; background: rgba(3, 7, 18, 0.7); border-radius: 8px; overflow: hidden; margin: 12px 0 16px; border: 1px solid var(--card-border); }
+        .cooldown-bar-fill { height: 100%; width: 0%; background: var(--gold-gradient); transition: width 0.9s linear; }
         input, select, button { width: 100%; padding: 13px 15px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(3, 7, 18, 0.7); color: var(--text-color); font-size: 0.98rem; margin-top: 10px; outline: none; box-sizing: border-box; }
         input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
@@ -137,6 +140,8 @@
         };
 
         const ADMIN_LOGIN = "admin";
+        const THEFT_COOLDOWN_MS = 10 * 60 * 1000;
+        const DEFAULT_PAGE_TITLE = "Помощник Россия Онлайн (by jaxxxxson)";
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -149,6 +154,38 @@
         const cleanNumStr = (str) => parseFloat(String(str || '').replace(/[^\d.-]/g, '')) || 0;
         const getCleanNumber = (id) => cleanNumStr($(id)?.value);
         const isItemSold = (i) => i && (i.status === 'sold' || Number(i.sellPrice) > 0 || Boolean(i.soldTime));
+
+        // Звуковое уведомление через Web Audio API (без внешних файлов)
+        let audioCtx = null;
+        function unlockAudio() {
+            try {
+                let Ctx = window.AudioContext || window.webkitAudioContext;
+                if (!Ctx) return;
+                if (!audioCtx) audioCtx = new Ctx();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch (e) {}
+        }
+
+        function playCooldownSound() {
+            try {
+                unlockAudio();
+                if (!audioCtx) return;
+                const now = audioCtx.currentTime;
+                [[659.25, 0, 0.16], [880, 0.17, 0.28]].forEach(([freq, offset, dur]) => {
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + offset);
+                    gain.gain.setValueAtTime(0.001, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.22, now + offset + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + dur);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + dur + 0.02);
+                });
+            } catch (e) {}
+        }
 
         const getMskNow = () => {
             let now = new Date();
@@ -177,7 +214,6 @@
             return d.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' }) + ' ' + d.toLocaleTimeString('ru-RU', { timeZone: 'Europe/Moscow', hour: '2-digit', minute: '2-digit' });
         };
 
-        // Безопасная перезапись карт system/config (updateDoc удаляет стертые ключи, в отличие от setDoc merge)
         async function updateSystemConfigMaps(payload) {
             let ref = doc(db, "system", "config");
             try { await updateDoc(ref, payload); }
@@ -244,7 +280,8 @@
         let pendingRegistrationProfile = null, sellingItemId = null;
         let userData = {
             login: "", charName: "", staticId: "",
-            history: [], activeTheft: null, courierHistory: [], activeCourier: null,
+            history: [], activeTheft: null, theftCooldownEnd: null,
+            courierHistory: [], activeCourier: null,
             houseHistory: [], activeHouse: null, resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
         };
         let allUsersCache = [], allowedUsersMapCache = {}, pendingRequestsMapCache = {};
@@ -299,7 +336,6 @@
             if (isReg) refreshAuthBanner();
         };
 
-        // Единая логика периодов для Фарма и Рейтинга
         function checkDateInPeriod(dateStr, ts, target) {
             let { mode, date: customVal } = periods[target];
             if (mode === 'all') return true;
@@ -565,15 +601,12 @@
             $('reseller-sort').addEventListener('change', () => { renderState(); logAction("Изменена сортировка перекупа", $('reseller-sort').value); });
             $('admin-level-picker').addEventListener('change', renderAdminCarsList);
 
-            // Фильтры пользователей в админке
             $('admin-users-status-filter')?.addEventListener('change', renderAdminUsersProfiles);
             $('admin-users-search')?.addEventListener('input', renderAdminUsersProfiles);
 
-            // Фильтры Торговой тетради
             ['ledger-status-filter', 'ledger-sort', 'ledger-limit'].forEach(id => $(id)?.addEventListener('change', () => { ledgerPage = 1; renderResellerLedger(); }));
             $('ledger-search')?.addEventListener('input', () => { ledgerPage = 1; renderResellerLedger(); });
 
-            // Фильтры Логов
             ['admin-log-user-filter', 'admin-log-type-filter', 'admin-log-sort', 'admin-log-limit'].forEach(id => $(id)?.addEventListener('change', () => { adminLogsPage = 1; renderAdminLogs(); }));
             $('admin-log-search')?.addEventListener('input', () => { adminLogsPage = 1; renderAdminLogs(); });
 
@@ -586,6 +619,8 @@
                 'btn-start': startTheft,
                 'btn-finish': () => endTheft(false),
                 'btn-caught': () => endTheft(true),
+                'btn-test-cooldown-sound': () => { playCooldownSound(); showToast("🔊 Звук уведомления работает!"); },
+                'btn-clear-cooldown': clearTheftCooldown,
                 'btn-start-courier': startCourier,
                 'btn-open-finish-courier': openFinishCourierBox,
                 'btn-save-courier': finishCourier,
@@ -654,6 +689,7 @@
                     if (!globalRefreshInterval) globalRefreshInterval = setInterval(loadGlobalRatings, 60000);
                 } else {
                     currentUser = null; currentLogin = ""; isUserDataLoaded = false;
+                    document.title = DEFAULT_PAGE_TITLE;
                     if (subInterval) { clearInterval(subInterval); subInterval = null; }
                     if (globalRefreshInterval) { clearInterval(globalRefreshInterval); globalRefreshInterval = null; }
                     $('auth-section').style.display = 'block';
@@ -698,7 +734,6 @@
                     pendingRequestsMapCache = { ...(cData.pendingRequestsMap || {}) };
                     openRegistrationEnabled = Boolean(cData.openRegistration);
 
-                    // Авто-очистка зависших заявок, которым ранее уже была выдана активная подписка
                     if (currentLogin === ADMIN_LOGIN) {
                         let cleaned = false;
                         Object.keys(pendingRequestsMapCache).forEach(l => {
@@ -846,7 +881,7 @@
             });
         }
 
-        // ==================== АДМИН-РЕДАКТОР ЗАЯВОК, МАССОВЫХ ПОДПИСОК И ПРОФИЛЕЙ ====================
+        // ==================== АДМИН-РЕДАКТОР ====================
         window.toggleOpenRegistration = async function(cb) {
             openRegistrationEnabled = cb.checked;
             try {
@@ -893,7 +928,6 @@
                 allowedMap[login] = Date.now() + (days * 86400000);
                 delete pendingMap[login];
 
-                // Мгновенно обновляем локальный кэш и интерфейс
                 allowedUsersMapCache = allowedMap;
                 pendingRequestsMapCache = pendingMap;
                 renderPendingRequestsList();
@@ -990,7 +1024,6 @@
             renderAdminUsersProfiles();
         };
 
-        // Массовая выдача подписки выбранным или сразу всем зарегистрированным игрокам
         async function bulkGrantSubscription(targetAll = false) {
             let days = parseFloat($('bulk-sub-days')?.value);
             let mode = $('bulk-sub-mode')?.value || 'add';
@@ -1628,7 +1661,8 @@
                     login: currentLogin,
                     charName: pendingRegistrationProfile?.charName || (currentLogin === ADMIN_LOGIN ? "Евгений Дубровский" : ""),
                     staticId: pendingRegistrationProfile?.staticId || (currentLogin === ADMIN_LOGIN ? "878" : ""),
-                    history: [], activeTheft: null, courierHistory: [], activeCourier: null,
+                    history: [], activeTheft: null, theftCooldownEnd: null,
+                    courierHistory: [], activeCourier: null,
                     houseHistory: [], activeHouse: null, resellerItems: [], diceHistory: [], debts: [], customRecords: {}, activityLogs: []
                 };
                 pendingRegistrationProfile = null;
@@ -1831,6 +1865,7 @@
         }
 
         async function startTheft() {
+            unlockAudio();
             let level = $('level-select')?.value || "7", lvlObj = getCurrentLevelObj();
             if (lvlObj.mode === 'custom') {
                 let customPrice = getCleanNumber('custom-theft-price');
@@ -1849,11 +1884,14 @@
                     userData.activeTheft = { level, carName: car.name, bonusPercent: getActiveBonusPercent(), startTime: Date.now() };
                 }
             }
+            userData.theftCooldownEnd = null;
+            document.title = DEFAULT_PAGE_TITLE;
             await commitChange(`Угон начат: ${userData.activeTheft.carName}`, "success", false, "Старт угона", `${userData.activeTheft.carName} (${level} ур.)`);
         }
 
         async function endTheft(caught = false) {
             if (!userData.activeTheft) return showToast("Нет активного угона!", "error");
+            unlockAudio();
             let sec = Math.max(0, Math.floor((Date.now() - (Number(userData.activeTheft.startTime) || Date.now())) / 1000));
             let name = userData.activeTheft.carName || "Авто", level = userData.activeTheft.level || "7";
             let customPrice = Number(userData.activeTheft.customPrice) || 0, bonusPct = Number(userData.activeTheft.bonusPercent) || 0;
@@ -1874,7 +1912,14 @@
 
             userData.history.unshift({ id: Date.now(), name: displayCarName, level, duration, price, status: 'success', time, date });
             userData.activeTheft = null;
-            await commitChange(`Авто сдано! +${fmt(price)} ₽`, "success", true, "Успешная сдача угона", `${displayCarName}: +${fmt(price)} ₽ (${duration})`);
+            userData.theftCooldownEnd = Date.now() + THEFT_COOLDOWN_MS;
+            await commitChange(`Авто сдано! +${fmt(price)} ₽ (Пауза 10 мин)`, "success", true, "Успешная сдача угона", `${displayCarName}: +${fmt(price)} ₽ (${duration})`);
+        }
+
+        async function clearTheftCooldown() {
+            userData.theftCooldownEnd = null;
+            document.title = DEFAULT_PAGE_TITLE;
+            await commitChange("Таймер паузы сброшен", "success", false);
         }
 
         const fmtTimerClock = (startTime) => {
@@ -1882,10 +1927,48 @@
             return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
         };
 
+        const fmtCountdownClock = (remMs) => {
+            let sec = Math.max(0, Math.ceil(remMs / 1000));
+            return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+        };
+
         function updateTimers() {
             if (userData.activeTheft && $('active-timer')) $('active-timer').textContent = fmtTimerClock(userData.activeTheft.startTime);
             if (userData.activeCourier && $('active-courier-timer')) $('active-courier-timer').textContent = fmtTimerClock(userData.activeCourier.startTime);
             if (userData.activeHouse && $('active-house-timer')) $('active-house-timer').textContent = fmtTimerClock(userData.activeHouse.startTime);
+
+            // Таймер 10-минутной паузы между угонами
+            let cdPanel = $('theft-cooldown-panel');
+            if (cdPanel) {
+                let cdEnd = Number(userData.theftCooldownEnd) || 0;
+                if (cdEnd > 0) {
+                    let rem = cdEnd - Date.now();
+                    if (rem > 0) {
+                        let mmss = fmtCountdownClock(rem);
+                        cdPanel.style.display = 'block';
+                        if ($('theft-cooldown-timer')) $('theft-cooldown-timer').textContent = mmss;
+                        if ($('theft-cooldown-bar')) {
+                            let pct = Math.min(100, Math.max(0, ((THEFT_COOLDOWN_MS - rem) / THEFT_COOLDOWN_MS) * 100));
+                            $('theft-cooldown-bar').style.width = pct + '%';
+                        }
+                        document.title = `⏳ ${mmss} — Угон | Помощник`;
+                    } else {
+                        cdPanel.style.display = 'none';
+                        document.title = DEFAULT_PAGE_TITLE;
+                        let justFinished = (Date.now() - cdEnd) < 15000;
+                        userData.theftCooldownEnd = null;
+                        saveUserData().catch(console.error);
+                        if (justFinished) {
+                            playCooldownSound();
+                            showToast("🚗 10 минут прошли! Можно брать следующую угонку!", "success");
+                        }
+                    }
+                } else {
+                    cdPanel.style.display = 'none';
+                    if (document.title.startsWith('⏳')) document.title = DEFAULT_PAGE_TITLE;
+                }
+            }
+
             document.querySelectorAll('.res-timer').forEach(el => { let st = parseInt(el.dataset.start); if (st) el.textContent = formatTime(Date.now() - st); });
         }
 
@@ -2434,6 +2517,23 @@
                     <div class="stat-card"><div>Угонов за сегодня</div><div id="today-count" class="stat-value">0</div></div>
                     <div class="stat-card"><div>Заработано за сегодня (Угон)</div><div id="today-earned" class="stat-value">0 ₽</div></div>
                 </div>
+
+                <!-- Таймер паузы между угонами (10 мин) -->
+                <div class="card cooldown-card" id="theft-cooldown-panel" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div>
+                            <div style="font-weight:700; color:var(--accent); font-size:1.05rem;">⏳ Пауза до следующего угона</div>
+                            <div style="font-size:0.85rem; color:var(--text-muted); margin-top:3px;">Когда таймер закончится, прозвучит звуковое уведомление</div>
+                        </div>
+                        <div id="theft-cooldown-timer" class="timer-display" style="margin:0; font-size:2rem;">10:00</div>
+                    </div>
+                    <div class="cooldown-bar-wrap"><div id="theft-cooldown-bar" class="cooldown-bar-fill"></div></div>
+                    <div class="button-group">
+                        <button type="button" id="btn-test-cooldown-sound" class="secondary" style="flex:1; margin-top:0; padding:10px;">🔊 Тест звука</button>
+                        <button type="button" id="btn-clear-cooldown" class="secondary" style="flex:1; margin-top:0; padding:10px;">✕ Сбросить таймер</button>
+                    </div>
+                </div>
+
                 <div class="card" id="active-panel" style="display:none;">
                     <h2>🚗 Активный угон</h2>
                     <p>Автомобиль: <strong id="active-car-name"></strong></p>
